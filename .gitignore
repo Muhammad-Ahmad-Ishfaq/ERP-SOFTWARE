@@ -1,0 +1,42 @@
+# ===============================
+# Python / Django
+# ===============================
+backend/venv/
+backend/__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variables
+backend/.env
+frontend/.env
+
+# SQLite (ignore if accidentally created)
+backend/db.sqlite3
+*.sqlite3
+
+# Static & Media
+backend/staticfiles/
+backend/media/
+
+# ===============================
+# React / Vite
+# ===============================
+frontend/node_modules/
+frontend/dist/
+
+# ===============================
+# IDE
+# ===============================
+.vscode/
+.idea/
+
+# ===============================
+# Operating System
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# Logs
+# ===============================
+*.log
