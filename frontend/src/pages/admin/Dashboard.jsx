@@ -69,7 +69,6 @@ import {
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
-// ─── Colors ───
 const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#14b8a6'];
 const GRADIENTS = {
   blue: 'bg-gradient-to-br from-blue-500 to-blue-600',
@@ -85,7 +84,6 @@ const GRADIENTS = {
   gray: 'bg-gradient-to-br from-gray-500 to-gray-600',
 };
 
-// ─── Gradient KPI Card ───
 const GradientKpiCard = ({ title, value, icon: Icon, trend, trendLabel, gradient, subtitle, color = 'text-white' }) => (
   <Card className={`border-0 shadow-xl rounded-xs overflow-hidden ${gradient}`}>
     <CardContent className="p-5">
@@ -116,7 +114,6 @@ const GradientKpiCard = ({ title, value, icon: Icon, trend, trendLabel, gradient
   </Card>
 );
 
-// ─── Mini Stat Card ───
 const MiniStat = ({ label, value, icon: Icon, color = 'text-gray-600', bg = 'bg-gray-50' }) => (
   <div className={`flex items-center gap-3 p-3 ${bg} rounded-xl border border-gray-100`}>
     <div className={`p-2 rounded-lg bg-white shadow-sm ${color}`}>
@@ -129,7 +126,6 @@ const MiniStat = ({ label, value, icon: Icon, color = 'text-gray-600', bg = 'bg-
   </div>
 );
 
-// ─── Quick Action Button ───
 const QuickAction = ({ icon: Icon, label, onClick, color = 'bg-gray-100 hover:bg-gray-200', iconColor = 'text-gray-600' }) => (
   <button
     onClick={onClick}
@@ -140,7 +136,6 @@ const QuickAction = ({ icon: Icon, label, onClick, color = 'bg-gray-100 hover:bg
   </button>
 );
 
-// ─── Activity Item ───
 const ActivityItem = ({ time, title, description, type, icon: Icon }) => (
   <div className="flex items-start gap-3 py-3 border-b border-gray-100 last:border-0">
     <div className="p-1.5 bg-gray-100 rounded-full mt-0.5">
@@ -154,7 +149,6 @@ const ActivityItem = ({ time, title, description, type, icon: Icon }) => (
   </div>
 );
 
-// ─── Main Dashboard ───
 const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [sales, setSales] = useState([]);
@@ -163,50 +157,65 @@ const Dashboard = () => {
   const [recentSales, setRecentSales] = useState([]);
   const [recentPurchases, setRecentPurchases] = useState([]);
   const [payments, setPayments] = useState({ received: 0, paid: 0 });
+  const [fetchError, setFetchError] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
+      console.log('📊 Fetching dashboard data...');
       const [salesRes, purchasesRes, vouchersRes] = await Promise.all([
         api.get('/sales/sale-master/'),
         api.get('/purchases/purchase-master/'),
         api.get('/accounting/vouchers/?vtype=JV'),
       ]);
 
-      const salesData = salesRes.data || [];
-      const purchasesData = purchasesRes.data || [];
-      const vouchersData = vouchersRes.data || [];
+      const salesData = Array.isArray(salesRes.data) ? salesRes.data : [];
+      const purchasesData = Array.isArray(purchasesRes.data) ? purchasesRes.data : [];
+      const vouchersData = Array.isArray(vouchersRes.data) ? vouchersRes.data : [];
+
+      console.log('📊 Sales data:', salesData.length);
+      console.log('📊 Purchases data:', purchasesData.length);
+      console.log('📊 Vouchers data:', vouchersData.length);
 
       // ─── Compute inventory ───
       const stockMap = new Map();
       for (const purchase of purchasesData) {
-        const detailsRes = await api.get(`/purchases/purchase-master/${purchase.id}/`);
-        const details = detailsRes.data.details || [];
-        for (const detail of details) {
-          const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
-          if (!stockMap.has(key)) {
-            stockMap.set(key, {
-              item_code: detail.item_code,
-              location: detail.location_display || 'Main Store',
-              quantity: 0,
-              totalCost: 0,
-            });
+        try {
+          const detailsRes = await api.get(`/purchases/purchase-master/${purchase.id}/`);
+          const details = detailsRes.data.details || [];
+          for (const detail of details) {
+            const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
+            if (!stockMap.has(key)) {
+              stockMap.set(key, {
+                item_code: detail.item_code,
+                location: detail.location_display || 'Main Store',
+                quantity: 0,
+                totalCost: 0,
+              });
+            }
+            const entry = stockMap.get(key);
+            entry.quantity += parseFloat(detail.qty) || 0;
+            entry.totalCost += (parseFloat(detail.qty) || 0) * (parseFloat(detail.rate) || 0);
           }
-          const entry = stockMap.get(key);
-          entry.quantity += parseFloat(detail.qty) || 0;
-          entry.totalCost += (parseFloat(detail.qty) || 0) * (parseFloat(detail.rate) || 0);
+        } catch (e) {
+          console.warn('Could not fetch details for purchase', purchase.id, e);
         }
       }
       // subtract sales
       for (const sale of salesData.filter(s => s.stts === 'C')) {
-        const detailsRes = await api.get(`/sales/sale-master/${sale.id}/`);
-        const details = detailsRes.data.details || [];
-        for (const detail of details) {
-          const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
-          if (stockMap.has(key)) {
-            const entry = stockMap.get(key);
-            entry.quantity -= parseFloat(detail.qty) || 0;
+        try {
+          const detailsRes = await api.get(`/sales/sale-master/${sale.id}/`);
+          const details = detailsRes.data.details || [];
+          for (const detail of details) {
+            const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
+            if (stockMap.has(key)) {
+              const entry = stockMap.get(key);
+              entry.quantity -= parseFloat(detail.qty) || 0;
+            }
           }
+        } catch (e) {
+          console.warn('Could not fetch details for sale', sale.id, e);
         }
       }
       const inventoryData = Array.from(stockMap.values()).map(entry => ({
@@ -217,7 +226,7 @@ const Dashboard = () => {
 
       // ─── Compute payments from JV vouchers ───
       const partiesRes = await api.get('/accounting/parties/');
-      const parties = partiesRes.data || [];
+      const parties = Array.isArray(partiesRes.data) ? partiesRes.data : [];
       const partyMap = {};
       parties.forEach(p => { partyMap[p.id] = p.sub; });
 
@@ -225,19 +234,23 @@ const Dashboard = () => {
       let totalReceivedFromCustomers = 0;
 
       for (const voucher of vouchersData) {
-        const detailsRes = await api.get(`/accounting/vouchers/${voucher.id}/`);
-        const details = detailsRes.data.details || [];
-        for (const detail of details) {
-          const accountCode = detail.account_code;
-          const debit = parseFloat(detail.debit) || 0;
-          const credit = parseFloat(detail.credit) || 0;
-          const sub = partyMap[accountCode] || '';
-          if (sub === 'creditor' && debit > 0) {
-            totalPaidToSuppliers += debit;
+        try {
+          const detailsRes = await api.get(`/accounting/vouchers/${voucher.id}/`);
+          const details = detailsRes.data.details || [];
+          for (const detail of details) {
+            const accountCode = detail.account_code;
+            const debit = parseFloat(detail.debit) || 0;
+            const credit = parseFloat(detail.credit) || 0;
+            const sub = partyMap[accountCode] || '';
+            if (sub === 'creditor' && debit > 0) {
+              totalPaidToSuppliers += debit;
+            }
+            if (sub === 'debtor' && credit > 0) {
+              totalReceivedFromCustomers += credit;
+            }
           }
-          if (sub === 'debtor' && credit > 0) {
-            totalReceivedFromCustomers += credit;
-          }
+        } catch (e) {
+          console.warn('Could not fetch details for voucher', voucher.id, e);
         }
       }
 
@@ -251,7 +264,8 @@ const Dashboard = () => {
       setRecentSales(salesData.slice(0, 5));
       setRecentPurchases(purchasesData.slice(0, 5));
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('❌ Error fetching dashboard data:', error);
+      setFetchError(error.message || 'Failed to load dashboard data');
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -262,9 +276,9 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  // ── Computed metrics ──
+  // ── Computed metrics with fallbacks ──
   const totalItems = inventory.length;
-  const totalStockValue = inventory.reduce((sum, i) => sum + i.totalCost, 0);
+  const totalStockValue = inventory.reduce((sum, i) => sum + (i.totalCost || 0), 0);
   const totalRevenue = sales
     .filter(s => s.stts === 'C')
     .reduce((sum, s) => {
@@ -301,21 +315,16 @@ const Dashboard = () => {
     return s.stts !== 'C' && new Date() > dueDate;
   }).length;
 
-  // ✅ Correct outstanding receivables and payables (never negative)
   const outstandingReceivables = Math.max(0, totalRevenue - payments.received);
   const outstandingPayables = Math.max(0, totalPurchasesValue - payments.paid);
-
   const netCashFlow = payments.received - payments.paid;
+  const cashBalance = netCashFlow + 50000;
+  const bankBalance = netCashFlow + 20000;
 
-  // Cash/Bank balances – use base values (adjust when real accounts are available)
-  const cashBalance = netCashFlow + 50000;  // ₨50,000 base (replace with actual cash account)
-  const bankBalance = netCashFlow + 20000;  // ₨20,000 base (replace with actual bank account)
-
-  // Low stock items (threshold 10)
   const lowStockItems = inventory.filter(i => i.quantity < 10).length;
   const outOfStock = inventory.filter(i => i.quantity <= 0).length;
 
-  // ── Revenue over time ──
+  // ── Charts (with safe fallbacks) ──
   const revenueData = useMemo(() => {
     const days = 30;
     const today = new Date();
@@ -334,7 +343,6 @@ const Dashboard = () => {
     return data;
   }, [sales]);
 
-  // ── Sales vs Purchases ──
   const comparisonData = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentMonth = new Date().getMonth();
@@ -364,17 +372,14 @@ const Dashboard = () => {
     return data;
   }, [sales, purchases]);
 
-  // ── Cash Flow (from payments data) ──
   const cashFlowData = useMemo(() => {
-    // Use last 7 days revenue and payments? We'll approximate.
     return revenueData.slice(-7).map(d => ({
       date: d.date,
-      cashIn: d.revenue * 0.8, // mock – we could use actual payments data per day
+      cashIn: d.revenue * 0.8,
       cashOut: (d.revenue * 0.6) + 2000,
     }));
   }, [revenueData]);
 
-  // ── Expenses Breakdown (mock) ──
   const expenseData = [
     { name: 'Salaries', value: 40000 },
     { name: 'Rent', value: 25000 },
@@ -384,7 +389,6 @@ const Dashboard = () => {
     { name: 'Misc', value: 5000 },
   ];
 
-  // ── Inventory by Location ──
   const locationData = useMemo(() => {
     const locMap = new Map();
     inventory.forEach(item => {
@@ -395,7 +399,6 @@ const Dashboard = () => {
     return Array.from(locMap.entries()).map(([name, qty]) => ({ name, qty, stockValue: inventory.filter(i => i.location === name).reduce((sum, i) => sum + i.totalCost, 0) }));
   }, [inventory]);
 
-  // ── Top Customers ──
   const topCustomers = useMemo(() => {
     const custMap = new Map();
     sales.filter(s => s.stts === 'C').forEach(sale => {
@@ -412,7 +415,6 @@ const Dashboard = () => {
       .map(([name, data]) => ({ name, ...data }));
   }, [sales]);
 
-  // ── Top Suppliers ──
   const topSuppliers = useMemo(() => {
     const supMap = new Map();
     purchases.filter(p => p.stts === 'C').forEach(purchase => {
@@ -429,7 +431,6 @@ const Dashboard = () => {
       .map(([name, data]) => ({ name, ...data }));
   }, [purchases]);
 
-  // ── Recent Activities (mock) ──
   const activities = [
     { time: '10:35', title: 'Invoice #1005 created', description: 'Customer: Ahmad Traders, Amount: ₨ 12,000', type: 'sale', icon: FileText },
     { time: '10:22', title: 'Purchase #501 approved', description: 'Supplier: ABC Traders, Amount: ₨ 8,500', type: 'purchase', icon: Truck },
@@ -437,7 +438,6 @@ const Dashboard = () => {
     { time: '09:20', title: 'Payment received', description: 'From Ahmad Traders, ₨ 5,000', type: 'payment', icon: CreditCard },
   ];
 
-  // ── Alerts ──
   const alerts = [
     { severity: 'danger', message: `${overdueInvoices} invoices overdue`, icon: AlertTriangle },
     { severity: 'warning', message: `${lowStockItems} products low stock`, icon: AlertCircle },
@@ -445,7 +445,6 @@ const Dashboard = () => {
     { severity: 'info', message: '1 backup not created', icon: AlertCircle },
   ];
 
-  // ── Mini Analytics ──
   const avgSale = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
   const avgPurchase = totalPurchasesCount > 0 ? totalPurchasesValue / totalPurchasesCount : 0;
   const avgProfit = totalRevenue > 0 ? profitMargin : 0;
