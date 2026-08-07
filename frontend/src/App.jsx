@@ -28,7 +28,6 @@ import Payments from "./pages/admin/Payments";
 import Analytics from "./pages/admin/Analytics";
 import JournalVoucher from "./pages/admin/JournalVoucher";
 
-
 function App() {
   return (
     <>
@@ -41,7 +40,6 @@ function App() {
           path="/"
           element={<Navigate to="/login" replace />}
         />
-
 
         {/* Authentication Routes */}
         <Route
@@ -166,6 +164,5 @@ function App() {
     </>
   );
 }
-
 
 export default App;
