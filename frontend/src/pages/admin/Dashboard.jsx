@@ -178,44 +178,34 @@ const Dashboard = () => {
       console.log('📊 Purchases data:', purchasesData.length);
       console.log('📊 Vouchers data:', vouchersData.length);
 
-      // ─── Compute inventory ───
+      // ─── Compute inventory using embedded details ───
       const stockMap = new Map();
       for (const purchase of purchasesData) {
-        try {
-          const detailsRes = await api.get(`/purchases/purchase-master/${purchase.id}/`);
-          const details = detailsRes.data.details || [];
-          for (const detail of details) {
-            const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
-            if (!stockMap.has(key)) {
-              stockMap.set(key, {
-                item_code: detail.item_code,
-                location: detail.location_display || 'Main Store',
-                quantity: 0,
-                totalCost: 0,
-              });
-            }
-            const entry = stockMap.get(key);
-            entry.quantity += parseFloat(detail.qty) || 0;
-            entry.totalCost += (parseFloat(detail.qty) || 0) * (parseFloat(detail.rate) || 0);
+        const details = purchase.details || [];
+        for (const detail of details) {
+          const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
+          if (!stockMap.has(key)) {
+            stockMap.set(key, {
+              item_code: detail.item_code,
+              location: detail.location_display || 'Main Store',
+              quantity: 0,
+              totalCost: 0,
+            });
           }
-        } catch (e) {
-          console.warn('Could not fetch details for purchase', purchase.id, e);
+          const entry = stockMap.get(key);
+          entry.quantity += parseFloat(detail.qty) || 0;
+          entry.totalCost += (parseFloat(detail.qty) || 0) * (parseFloat(detail.rate) || 0);
         }
       }
       // subtract sales
       for (const sale of salesData.filter(s => s.stts === 'C')) {
-        try {
-          const detailsRes = await api.get(`/sales/sale-master/${sale.id}/`);
-          const details = detailsRes.data.details || [];
-          for (const detail of details) {
-            const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
-            if (stockMap.has(key)) {
-              const entry = stockMap.get(key);
-              entry.quantity -= parseFloat(detail.qty) || 0;
-            }
+        const details = sale.details || [];
+        for (const detail of details) {
+          const key = `${detail.item_code}-${detail.location_display || 'Main'}`;
+          if (stockMap.has(key)) {
+            const entry = stockMap.get(key);
+            entry.quantity -= parseFloat(detail.qty) || 0;
           }
-        } catch (e) {
-          console.warn('Could not fetch details for sale', sale.id, e);
         }
       }
       const inventoryData = Array.from(stockMap.values()).map(entry => ({
@@ -234,23 +224,18 @@ const Dashboard = () => {
       let totalReceivedFromCustomers = 0;
 
       for (const voucher of vouchersData) {
-        try {
-          const detailsRes = await api.get(`/accounting/vouchers/${voucher.id}/`);
-          const details = detailsRes.data.details || [];
-          for (const detail of details) {
-            const accountCode = detail.account_code;
-            const debit = parseFloat(detail.debit) || 0;
-            const credit = parseFloat(detail.credit) || 0;
-            const sub = partyMap[accountCode] || '';
-            if (sub === 'creditor' && debit > 0) {
-              totalPaidToSuppliers += debit;
-            }
-            if (sub === 'debtor' && credit > 0) {
-              totalReceivedFromCustomers += credit;
-            }
+        const details = voucher.details || [];
+        for (const detail of details) {
+          const accountCode = detail.account_code;
+          const debit = parseFloat(detail.debit) || 0;
+          const credit = parseFloat(detail.credit) || 0;
+          const sub = partyMap[accountCode] || '';
+          if (sub === 'creditor' && debit > 0) {
+            totalPaidToSuppliers += debit;
           }
-        } catch (e) {
-          console.warn('Could not fetch details for voucher', voucher.id, e);
+          if (sub === 'debtor' && credit > 0) {
+            totalReceivedFromCustomers += credit;
+          }
         }
       }
 
