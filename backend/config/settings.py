@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
 import os
-
+import dj_database_url
 # ------------------------------------------------------------------------------
 # Base Directory
 # ------------------------------------------------------------------------------
@@ -26,7 +26,11 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    ".vercel.app",
+]
 
 # ------------------------------------------------------------------------------
 # Installed Applications
@@ -111,16 +115,27 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # ------------------------------------------------------------------------------
 
-DATABASES = {
-    "default": {
-        "ENGINE": os.getenv("DB_ENGINE"),
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT"),
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": os.getenv("DB_ENGINE"),
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST"),
+            "PORT": os.getenv("DB_PORT"),
+        }
+    }
 
 # ------------------------------------------------------------------------------
 # Password Validation
@@ -177,9 +192,18 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "https://your-frontend.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# ------------------------------------------------------------------------------
+# CSRF
+# ------------------------------------------------------------------------------
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.vercel.app",
+]
 
 # ------------------------------------------------------------------------------
 # Django REST Framework
