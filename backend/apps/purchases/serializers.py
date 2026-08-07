@@ -12,7 +12,6 @@ class PurchaseDetailSerializer(serializers.ModelSerializer):
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
     location_display = serializers.CharField(source='location.name', read_only=True)
 
-    # Explicitly define location as PrimaryKeyRelatedField
     location = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
@@ -68,6 +67,7 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
     def validate(self, data):
         print("📥 Incoming data for purchase creation:", data)
 
+        # 1. Required fields
         if not data.get('vtype'):
             raise serializers.ValidationError({"vtype": "Voucher type is required."})
         if not data.get('vno'):
@@ -75,32 +75,29 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
         if not data.get('vdate'):
             raise serializers.ValidationError({"vdate": "Date is required."})
 
+        # 2. Validate supplier
         supplier = data.get('account_code')
         if not supplier:
             raise serializers.ValidationError({"account_code": "Supplier is required."})
-
         if not isinstance(supplier, Party):
             raise serializers.ValidationError({"account_code": "Invalid supplier."})
-
         if supplier.sub != "creditor":
             raise serializers.ValidationError({"account_code": "Selected account is not a supplier."})
 
+        # 3. Get purchase account from AC_SETUP
         setup = ACSetup.objects.first()
         if not setup:
             raise serializers.ValidationError({"purchase_code": "AC_SETUP configuration not found."})
         if not setup.purchase_code:
             raise serializers.ValidationError({"purchase_code": "No purchase account configured in AC_SETUP."})
 
-        purchase_account = setup.purchase_code
-        if isinstance(purchase_account, Party):
-            purchase_party = purchase_account
-        else:
-            try:
-                purchase_party = Party.objects.get(id=purchase_account)
-            except (Party.DoesNotExist, ValueError, TypeError):
-                raise serializers.ValidationError({
-                    "purchase_code": f"Invalid purchase account {purchase_account} in AC_SETUP."
-                })
+        purchase_account_id = setup.purchase_code  # now an integer
+        try:
+            purchase_party = Party.objects.get(id=purchase_account_id)
+        except Party.DoesNotExist:
+            raise serializers.ValidationError({
+                "purchase_code": f"Invalid purchase account ID {purchase_account_id} in AC_SETUP."
+            })
 
         if purchase_party.sub != "inventory":
             raise serializers.ValidationError({
@@ -109,6 +106,7 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
 
         data['purchase_code'] = purchase_party
 
+        # 4. Validate details
         details = data.get('details', [])
         if not details:
             raise serializers.ValidationError({"details": "At least one item is required."})
@@ -128,7 +126,7 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = Decimal(str(qty)) * Decimal(str(rate))
 
-            # Optional: validate location is an integer if provided
+            # Validate location (optional)
             loc = detail.get('location')
             if loc is not None and not isinstance(loc, (int, Location)):
                 try:

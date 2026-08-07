@@ -1,44 +1,12 @@
 # apps/ac_setup/models.py
 from django.db import models
-from apps.accounting.models import Party
-
 
 class ACSetup(models.Model):
-    cih_code = models.ForeignKey(
-        Party,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name='acsetup_cih'  # unique
-    )
-    freight_code = models.ForeignKey(
-        Party,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name='acsetup_freight'  # unique
-    )
-    t_o_code = models.ForeignKey(
-        Party,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name='acsetup_to'  # unique
-    )
-    purchase_code = models.ForeignKey(
-        Party,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name='acsetup_purchase'  # unique
-    )
-    sale_code = models.ForeignKey(
-        Party,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name='acsetup_sale'  # unique
-    )
+    cih_code = models.IntegerField(blank=True, null=True)
+    freight_code = models.IntegerField(blank=True, null=True)
+    t_o_code = models.IntegerField(blank=True, null=True)
+    purchase_code = models.IntegerField(blank=True, null=True)
+    sale_code = models.IntegerField(blank=True, null=True)
     sale_code_mix = models.IntegerField(blank=True, null=True)
     cashsale_code = models.IntegerField(blank=True, null=True)
     sample_code = models.IntegerField(blank=True, null=True)
