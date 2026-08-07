@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
@@ -28,141 +28,157 @@ import Payments from "./pages/admin/Payments";
 import Analytics from "./pages/admin/Analytics";
 import JournalVoucher from "./pages/admin/JournalVoucher";
 
+
 function App() {
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        reverseOrder={false}
+      />
 
-      <Routes>
+      <Suspense
+        fallback={
+          <div className="flex h-screen items-center justify-center">
+            Loading...
+          </div>
+        }
+      >
 
-        {/* Default Route */}
-        <Route
-          path="/"
-          element={<Navigate to="/login" replace />}
-        />
+        <Routes>
 
-        {/* Authentication Routes */}
-        <Route
-          path="/login"
-          element={<LoginPage />}
-        />
-
-        <Route
-          path="/register"
-          element={<RegisterPage />}
-        />
-
-
-        {/* First Time Setup Routes */}
-        <Route
-          path="/setup/company"
-          element={<CompanySetup />}
-        />
-
-        <Route
-          path="/setup/register"
-          element={<RegisterPage />}
-        />
-
-
-        {/* Admin Dashboard Routes */}
-        <Route
-          path="/admin"
-          element={<DashboardLayout />}
-        >
-
+          {/* Default */}
           <Route
-            index
-            element={<Dashboard />}
+            path="/"
+            element={<Navigate to="/login" replace />}
+          />
+
+
+          {/* Authentication */}
+          <Route
+            path="/login"
+            element={<LoginPage />}
           />
 
           <Route
-            path="accounting"
-            element={<Accounts />}
+            path="/register"
+            element={<RegisterPage />}
+          />
+
+
+          {/* Company Setup */}
+          <Route
+            path="/setup/company"
+            element={<CompanySetup />}
           />
 
           <Route
-            path="customers"
-            element={<Customers />}
+            path="/setup/register"
+            element={<RegisterPage />}
           />
 
+
+          {/* Admin */}
           <Route
-            path="suppliers"
-            element={<Suppliers />}
-          />
+            path="/admin"
+            element={<DashboardLayout />}
+          >
 
+            <Route
+              index
+              element={<Dashboard />}
+            />
+
+            <Route
+              path="accounting"
+              element={<Accounts />}
+            />
+
+            <Route
+              path="customers"
+              element={<Customers />}
+            />
+
+            <Route
+              path="suppliers"
+              element={<Suppliers />}
+            />
+
+            <Route
+              path="items"
+              element={<Items />}
+            />
+
+            <Route
+              path="warehouses"
+              element={<Locations />}
+            />
+
+            <Route
+              path="inventory"
+              element={<Inventory />}
+            />
+
+            <Route
+              path="purchase-orders"
+              element={<PurchaseOrder />}
+            />
+
+            <Route
+              path="purchases"
+              element={<Purchases />}
+            />
+
+            <Route
+              path="payments"
+              element={<Payments />}
+            />
+
+            <Route
+              path="revenue"
+              element={<Revenue />}
+            />
+
+            <Route
+              path="sale-orders"
+              element={<SaleOrder />}
+            />
+
+            <Route
+              path="invoices"
+              element={<SaleBills />}
+            />
+
+            <Route
+              path="support"
+              element={<Support />}
+            />
+
+            <Route
+              path="analytics"
+              element={<Analytics />}
+            />
+
+            <Route
+              path="journal-voucher"
+              element={<JournalVoucher />}
+            />
+
+          </Route>
+
+
+          {/* Not Found */}
           <Route
-            path="items"
-            element={<Items />}
+            path="*"
+            element={<Navigate to="/login" replace />}
           />
 
-          <Route
-            path="warehouses"
-            element={<Locations />}
-          />
+        </Routes>
 
-          <Route
-            path="inventory"
-            element={<Inventory />}
-          />
-
-          <Route
-            path="purchase-orders"
-            element={<PurchaseOrder />}
-          />
-
-          <Route
-            path="purchases"
-            element={<Purchases />}
-          />
-
-          <Route
-            path="payments"
-            element={<Payments />}
-          />
-
-          <Route
-            path="revenue"
-            element={<Revenue />}
-          />
-
-          <Route
-            path="sale-orders"
-            element={<SaleOrder />}
-          />
-
-          <Route
-            path="invoices"
-            element={<SaleBills />}
-          />
-
-          <Route
-            path="support"
-            element={<Support />}
-          />
-
-          <Route
-            path="analytics"
-            element={<Analytics />}
-          />
-
-          <Route
-            path="journal-voucher"
-            element={<JournalVoucher />}
-          />
-
-        </Route>
-
-
-        {/* Unknown URL Redirect */}
-        <Route
-          path="*"
-          element={<Navigate to="/login" replace />}
-        />
-
-      </Routes>
+      </Suspense>
     </>
   );
 }
+
 
 export default App;
