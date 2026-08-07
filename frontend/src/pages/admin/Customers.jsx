@@ -33,6 +33,7 @@ const Customers = () => {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editCustomerData, setEditCustomerData] = useState(null);
@@ -43,7 +44,6 @@ const Customers = () => {
       const response = await api.get('/accounting/parties/');
       const data = response.data;
       const allParties = Array.isArray(data) ? data : data.results || [];
-      // Filter only debtors
       const debtors = allParties.filter(p => p.sub === 'debtor');
       setCustomers(debtors);
     } catch (error) {
@@ -59,7 +59,6 @@ const Customers = () => {
     fetchCustomers();
   }, []);
 
-  // ---------- Delete ----------
   const handleDeleteClick = (id) => {
     setDeleteId(id);
     setDeleteDialogOpen(true);
@@ -67,20 +66,31 @@ const Customers = () => {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
+    setIsDeleting(true);
     try {
       await api.delete(`/accounting/parties/${deleteId}/`);
       toast.success('Customer deleted successfully');
-      fetchCustomers();
+      setCustomers((prev) => prev.filter((c) => c.id !== deleteId));
+      setDeleteDialogOpen(false);
+      setDeleteId(null);
     } catch (error) {
       console.error('Error deleting customer:', error);
-      toast.error('Failed to delete customer');
+      let errorMsg = 'Failed to delete customer.';
+      if (error.response?.status === 400) {
+        errorMsg = error.response.data?.error || 'This customer is used in sales or orders and cannot be deleted.';
+      } else if (error.response?.status === 403) {
+        errorMsg = 'You do not have permission to delete this customer.';
+      } else if (error.response?.status === 404) {
+        errorMsg = 'Customer not found.';
+      }
+      toast.error(errorMsg);
     } finally {
+      setIsDeleting(false);
       setDeleteDialogOpen(false);
       setDeleteId(null);
     }
   };
 
-  // ---------- Edit ----------
   const handleEditClick = (customer) => {
     setEditCustomerData(customer);
     setEditDialogOpen(true);
@@ -104,7 +114,6 @@ const Customers = () => {
     setEditCustomerData(null);
   };
 
-  // ---------- Add New ----------
   const handleAddNew = () => {
     setEditingCustomerId(null);
     setCustomerForm({
@@ -198,7 +207,7 @@ const Customers = () => {
         setCustomerForm={setCustomerForm}
         editingCustomerId={editingCustomerId}
         onSave={handleSaveSuccess}
-        existingCustomers={customers}  // pass debtors for auto-increment
+        existingCustomers={customers}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -209,7 +218,11 @@ const Customers = () => {
               Are you sure?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-gray-500 mt-2">
-              This action cannot be undone. This will permanently delete this customer and remove its data from the server.
+              This action cannot be undone. This will permanently delete this customer.
+              <br />
+              <span className="text-xs text-gray-400">
+                If this customer is used in any sale or order, deletion will be blocked.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex justify-end space-x-3 mt-2">
@@ -221,9 +234,10 @@ const Customers = () => {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
-              className="px-4 py-2 border border-transparent rounded-xs text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+              className="px-4 py-2 border border-transparent rounded-xs text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

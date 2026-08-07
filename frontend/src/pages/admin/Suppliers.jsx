@@ -33,6 +33,7 @@ const Suppliers = () => {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editSupplierData, setEditSupplierData] = useState(null);
@@ -43,7 +44,6 @@ const Suppliers = () => {
       const response = await api.get('/accounting/parties/');
       const data = response.data;
       const allParties = Array.isArray(data) ? data : data.results || [];
-      // Filter only creditors
       const creditors = allParties.filter(p => p.sub === 'creditor');
       setSuppliers(creditors);
     } catch (error) {
@@ -59,7 +59,6 @@ const Suppliers = () => {
     fetchSuppliers();
   }, []);
 
-  // ---------- Delete ----------
   const handleDeleteClick = (id) => {
     setDeleteId(id);
     setDeleteDialogOpen(true);
@@ -67,20 +66,31 @@ const Suppliers = () => {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
+    setIsDeleting(true);
     try {
       await api.delete(`/accounting/parties/${deleteId}/`);
       toast.success('Supplier deleted successfully');
-      fetchSuppliers();
+      setSuppliers((prev) => prev.filter((s) => s.id !== deleteId));
+      setDeleteDialogOpen(false);
+      setDeleteId(null);
     } catch (error) {
       console.error('Error deleting supplier:', error);
-      toast.error('Failed to delete supplier');
+      let errorMsg = 'Failed to delete supplier.';
+      if (error.response?.status === 400) {
+        errorMsg = error.response.data?.error || 'This supplier is used in purchases or orders and cannot be deleted.';
+      } else if (error.response?.status === 403) {
+        errorMsg = 'You do not have permission to delete this supplier.';
+      } else if (error.response?.status === 404) {
+        errorMsg = 'Supplier not found.';
+      }
+      toast.error(errorMsg);
     } finally {
+      setIsDeleting(false);
       setDeleteDialogOpen(false);
       setDeleteId(null);
     }
   };
 
-  // ---------- Edit ----------
   const handleEditClick = (supplier) => {
     setEditSupplierData(supplier);
     setEditDialogOpen(true);
@@ -104,7 +114,6 @@ const Suppliers = () => {
     setEditSupplierData(null);
   };
 
-  // ---------- Add New ----------
   const handleAddNew = () => {
     setEditingSupplierId(null);
     setSupplierForm({
@@ -198,7 +207,7 @@ const Suppliers = () => {
         setSupplierForm={setSupplierForm}
         editingSupplierId={editingSupplierId}
         onSave={handleSaveSuccess}
-        existingSuppliers={suppliers}  // pass creditors for auto-increment
+        existingSuppliers={suppliers}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -209,7 +218,11 @@ const Suppliers = () => {
               Are you sure?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-gray-500 mt-2">
-              This action cannot be undone. This will permanently delete this supplier and remove its data from the server.
+              This action cannot be undone. This will permanently delete this supplier.
+              <br />
+              <span className="text-xs text-gray-400">
+                If this supplier is used in any purchase or order, deletion will be blocked.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex justify-end space-x-3 mt-2">
@@ -221,9 +234,10 @@ const Suppliers = () => {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
-              className="px-4 py-2 border border-transparent rounded-xs text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+              className="px-4 py-2 border border-transparent rounded-xs text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

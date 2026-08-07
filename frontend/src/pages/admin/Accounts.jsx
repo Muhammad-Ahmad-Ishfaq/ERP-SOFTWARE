@@ -32,11 +32,10 @@ const Accounts = () => {
     gst_no: '',
   });
 
-  // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editAccountData, setEditAccountData] = useState(null);
 
@@ -59,7 +58,6 @@ const Accounts = () => {
     fetchAccounts();
   }, []);
 
-  // ---------- Delete ----------
   const handleDeleteClick = (id) => {
     setDeleteId(id);
     setDeleteDialogOpen(true);
@@ -67,20 +65,33 @@ const Accounts = () => {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
+    setIsDeleting(true);
     try {
       await api.delete(`/accounting/parties/${deleteId}/`);
       toast.success('Account deleted successfully');
-      fetchAccounts();
+      setAccounts((prev) => prev.filter((acc) => acc.id !== deleteId));
+      setDeleteDialogOpen(false);
+      setDeleteId(null);
     } catch (error) {
       console.error('Error deleting account:', error);
-      toast.error('Failed to delete account');
+      let errorMsg = 'Failed to delete account.';
+      if (error.response?.status === 400) {
+        errorMsg = error.response.data?.error || 'This account is used in transactions and cannot be deleted.';
+      } else if (error.response?.status === 403) {
+        errorMsg = 'You do not have permission to delete this account.';
+      } else if (error.response?.status === 404) {
+        errorMsg = 'Account not found.';
+      }
+      toast.error(errorMsg);
+      // Keep the item in the list – do not remove
     } finally {
+      setIsDeleting(false);
+      // Keep dialog open if error? Better to close it.
       setDeleteDialogOpen(false);
       setDeleteId(null);
     }
   };
 
-  // ---------- Edit ----------
   const handleEditClick = (account) => {
     setEditAccountData(account);
     setEditDialogOpen(true);
@@ -105,7 +116,6 @@ const Accounts = () => {
     setEditAccountData(null);
   };
 
-  // ---------- Add New ----------
   const handleAddNew = () => {
     setEditingAccountId(null);
     setAccountForm({
@@ -208,6 +218,10 @@ const Accounts = () => {
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-gray-500 mt-2">
               This action cannot be undone. This will permanently delete this account and remove its data from the server.
+              <br />
+              <span className="text-xs text-gray-400">
+                If this account is used in any transaction (vouchers, purchases, sales), deletion will be blocked.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex justify-end space-x-3 mt-2">
@@ -219,9 +233,10 @@ const Accounts = () => {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
-              className="px-4 py-2 border border-transparent rounded-xs text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+              className="px-4 py-2 border border-transparent rounded-xs text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
