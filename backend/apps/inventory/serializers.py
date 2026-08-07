@@ -10,7 +10,6 @@ class UnitSerializer(serializers.ModelSerializer):
 
 
 class ItemSerializer(serializers.ModelSerializer):
-    # Optional: include UOM name for display
     uom_name = serializers.CharField(source='UOM.SHORT_NAME', read_only=True)
 
     class Meta:
@@ -24,3 +23,10 @@ class ItemSerializer(serializers.ModelSerializer):
             'CREATED_AT', 'UPDATED_AT'
         ]
         read_only_fields = ['ITEM_ID', 'ITEM_CODE', 'CREATED_AT', 'UPDATED_AT']
+
+    def validate_ITEM_NAME(self, value):
+        """Prevent duplicate item names (including inactive items)."""
+        # Check if any item (active or inactive) has the same name
+        if Item.all_objects.filter(ITEM_NAME__iexact=value).exists():
+            raise serializers.ValidationError("An item with this name already exists.")
+        return value
