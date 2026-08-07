@@ -1,5 +1,7 @@
+# apps/accounting/models.py
 from django.db import models
 from apps.users.models import User
+
 
 class Party(models.Model):
     ACCOUNT_TYPES = [
@@ -58,9 +60,10 @@ class VoucherDetail(models.Model):
     vtype = models.CharField(max_length=5, db_column='VTYPE')
     vno = models.IntegerField(db_column='VNO')
     vsn = models.IntegerField(db_column='VSN')
+    # ✅ PROTECT prevents deleting a Party that has voucher details
     account_code = models.ForeignKey(
         Party,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,   # <-- changed from CASCADE
         db_column='ACCOUNT_CODE',
         related_name='voucher_details'
     )

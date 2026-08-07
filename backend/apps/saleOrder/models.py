@@ -4,18 +4,19 @@ from apps.users.models import User
 from apps.accounting.models import Party
 from apps.inventory.models import Item, Unit
 
+
 class SaleOrderMaster(models.Model):
     vtype = models.CharField(max_length=5, db_column='VTYPE')
     vno = models.IntegerField(db_column='VNO')
     vdate = models.DateField(db_column='VDATE')
     customer = models.ForeignKey(
         Party,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         db_column='CUSTOMER_ID',
         related_name='sale_orders',
-        limit_choices_to={'sub': 'debtor'}
+        limit_choices_to={'sub': 'debtor'},
+        null=True,          # ✅ keep nullable
+        blank=True
     )
     remarks = models.CharField(max_length=100, db_column='REMARKS', blank=True, null=True)
     stts = models.CharField(max_length=1, db_column='STTS', default='P')
@@ -44,19 +45,19 @@ class SaleOrderDetail(models.Model):
     vsn = models.IntegerField(db_column='VSN')
     item_code = models.ForeignKey(
         Item,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         db_column='ITEM_CODE',
-        related_name='sale_order_details'
+        related_name='sale_order_details',
+        null=True,
+        blank=True
     )
     uom = models.ForeignKey(
         Unit,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         db_column='UOM_ID',
-        related_name='sale_order_details'
+        related_name='sale_order_details',
+        null=True,
+        blank=True
     )
     qty = models.DecimalField(max_digits=11, decimal_places=3, db_column='QTY', default=0)
     rate = models.DecimalField(max_digits=13, decimal_places=4, db_column='RATE', default=0)

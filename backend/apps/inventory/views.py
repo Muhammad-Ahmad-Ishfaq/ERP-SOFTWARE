@@ -1,53 +1,35 @@
 # apps/inventory/views.py
 from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
-from django.db import IntegrityError
-import json
-
-from .models import Unit, Item
-from .serializers import UnitSerializer, ItemSerializer
+from .models import Item, Unit
+from .serializers import ItemSerializer, UnitSerializer
 
 
 class UnitViewSet(viewsets.ModelViewSet):
-    queryset = Unit.objects.all()
+    queryset = Unit.objects.filter(STATUS=True)
     serializer_class = UnitSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
 
 
 class ItemViewSet(viewsets.ModelViewSet):
-    queryset = Item.objects.all()
+    queryset = Item.objects.all()  # uses ItemManager → only active
     serializer_class = ItemSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    
-    def create(self, request, *args, **kwargs):
-        """Override create to log and validate incoming data"""
-        print("=" * 60)
-        print("📥 INCOMING ITEM DATA:")
-        print(f"   Request data: {request.data}")
-        print(f"   Request user: {request.user}")
-        print("=" * 60)
-        
-        # Try to validate the data
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            print("❌ VALIDATION ERRORS:")
-            for field, errors in serializer.errors.items():
-                print(f"   {field}: {errors}")
-            print("=" * 60)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        print("✅ Validation passed!")
-        return super().create(request, *args, **kwargs)
-    
-    def perform_create(self, serializer):
-        """Auto-set created_by when creating item"""
-        user = self.request.user
-        print(f"📥 Creating item with user: {user} (ID: {user.id})")
-        serializer.save(CREATED_BY=user)
-    
-    def perform_update(self, serializer):
-        """Auto-set updated_by when updating item"""
-        user = self.request.user
-        print(f"📥 Updating item with user: {user} (ID: {user.id})")
-        serializer.save(UPDATED_BY=user)
+
+    def get_queryset(self):
+        # Allow searching/filtering
+        queryset = super().get_queryset()
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(ITEM_NAME__icontains=search)
+        return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft-delete: set STATUS=False instead of physically deleting.
+        """
+        item = self.get_object()
+        item.STATUS = False
+        item.save()
+        return Response(
+            {'detail': 'Item deactivated successfully.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
