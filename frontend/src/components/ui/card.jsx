@@ -1,5 +1,4 @@
 import * as React from "react"
-
 import { cn } from "@/lib/utils"
 
 function Card({
@@ -12,9 +11,11 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-[var(--card-spacing)] overflow-hidden rounded-xl bg-card py-[var(--card-spacing)] text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:1rem] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:0.75rem] has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl"
+        "group/card flex flex-col gap-[var(--card-spacing)] overflow-hidden rounded-xl bg-white text-sm text-gray-900 ring-1 ring-foreground/10 [--card-spacing:1rem] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:0.75rem] has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl shadow",
+        className
       )}
-      {...props} />
+      {...props}
+    />
   );
 }
 
@@ -29,7 +30,8 @@ function CardHeader({
         "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
         className
       )}
-      {...props} />
+      {...props}
+    />
   );
 }
 
@@ -41,10 +43,11 @@ function CardTitle({
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm text-gray-900",
         className
       )}
-      {...props} />
+      {...props}
+    />
   );
 }
 
@@ -55,8 +58,9 @@ function CardDescription({
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
-      {...props} />
+      className={cn("text-sm text-gray-500", className)}
+      {...props}
+    />
   );
 }
 
@@ -71,7 +75,8 @@ function CardAction({
         "col-start-2 row-span-2 row-start-1 self-start justify-self-end",
         className
       )}
-      {...props} />
+      {...props}
+    />
   );
 }
 
@@ -83,7 +88,8 @@ function CardContent({
     <div
       data-slot="card-content"
       className={cn("px-(--card-spacing)", className)}
-      {...props} />
+      {...props}
+    />
   );
 }
 
@@ -98,7 +104,8 @@ function CardFooter({
         "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
         className
       )}
-      {...props} />
+      {...props}
+    />
   );
 }
 
