@@ -206,18 +206,17 @@ const Items = () => {
     setIsDeleting(true);
     try {
       await api.delete(`/inventory/items/${itemToDelete.ITEM_ID}/`);
-      // Success – item was soft-deleted (deactivated)
+      // ✅ Success – item is physically deleted (no soft delete)
       setItems((prevItems) => prevItems.filter((i) => i.ITEM_ID !== itemToDelete.ITEM_ID));
-      toast.success(`"${itemToDelete.ITEM_NAME}" deactivated successfully`);
+      toast.success(`"${itemToDelete.ITEM_NAME}" deleted successfully`);
       setDeleteDialogOpen(false);
       setItemToDelete(null);
     } catch (error) {
       console.error('❌ Error deleting item:', error);
       
-      // Handle backend error – item is referenced and cannot be deleted
+      // ✅ Show detailed error from backend
       let errorMsg = 'Failed to delete item.';
       if (error.response?.status === 400) {
-        // Backend returns a detailed error message
         errorMsg = error.response.data?.error || 
                    'This item is used in purchases, sales, or orders and cannot be deleted.';
       } else if (error.response?.status === 403) {
@@ -226,7 +225,7 @@ const Items = () => {
         errorMsg = 'Item not found.';
       }
       toast.error(errorMsg);
-      // ✅ Do NOT remove the item from the list – it stays
+      // ✅ Item stays in the list – no removal
     } finally {
       setIsDeleting(false);
       setDeleteDialogOpen(false);
@@ -788,8 +787,8 @@ const Items = () => {
               <br />
               <span className="text-xs text-gray-400">
                 If this item is referenced in any <strong>Purchase, Sale, Voucher, or Order</strong>,
-                deletion will be blocked and you will see a detailed error message.
-                Otherwise, it will be deactivated (soft delete) and removed from the list.
+                deletion will be <strong>blocked</strong> and you will see a detailed error message.
+                Otherwise, it will be permanently deleted.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>

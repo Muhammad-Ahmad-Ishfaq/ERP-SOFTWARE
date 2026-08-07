@@ -28,7 +28,8 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Soft‑delete: set STATUS=False only if the item is not referenced.
+        Delete item only if it is NOT referenced in any transaction.
+        If referenced, return a clear error message.
         """
         item = self.get_object()
 
@@ -39,32 +40,23 @@ class ItemViewSet(viewsets.ModelViewSet):
         used_in_sale_orders = SaleOrderDetail.objects.filter(item_code=item).exists()
 
         if any([used_in_purchases, used_in_sales, used_in_purchase_orders, used_in_sale_orders]):
-            # Build a detailed message
             references = []
             if used_in_purchases: references.append("Purchases")
             if used_in_sales: references.append("Sales")
             if used_in_purchase_orders: references.append("Purchase Orders")
             if used_in_sale_orders: references.append("Sale Orders")
             error_msg = (
-                f"This item is referenced in the following transactions: "
-                f"{', '.join(references)}. It cannot be deleted or deactivated."
+                f"Cannot delete this item because it is referenced in: "
+                f"{', '.join(references)}."
             )
             return Response(
                 {"error": error_msg},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Soft delete (deactivate)
-        item.STATUS = False
-        item.save()
+        # ✅ No soft delete – physically delete the item
+        item.delete()
         return Response(
-            {'detail': 'Item deactivated successfully.'},
+            {'detail': 'Item deleted successfully.'},
             status=status.HTTP_204_NO_CONTENT
         )
-
-    @action(detail=True, methods=['post'])
-    def reactivate(self, request, pk=None):
-        item = self.get_object()
-        item.STATUS = True
-        item.save()
-        return Response({'detail': 'Item reactivated successfully.'})
