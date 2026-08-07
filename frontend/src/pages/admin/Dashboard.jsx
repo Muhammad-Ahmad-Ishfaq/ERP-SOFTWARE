@@ -69,23 +69,48 @@ import {
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#14b8a6'];
-const GRADIENTS = {
-  blue: 'bg-gradient-to-br from-blue-500 to-blue-600',
-  green: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
-  orange: 'bg-gradient-to-br from-orange-500 to-orange-600',
-  purple: 'bg-gradient-to-br from-purple-500 to-purple-600',
-  red: 'bg-gradient-to-br from-red-500 to-red-600',
-  teal: 'bg-gradient-to-br from-teal-500 to-teal-600',
-  indigo: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
-  pink: 'bg-gradient-to-br from-pink-500 to-pink-600',
-  cyan: 'bg-gradient-to-br from-cyan-500 to-cyan-600',
-  yellow: 'bg-gradient-to-br from-yellow-500 to-yellow-600',
-  gray: 'bg-gradient-to-br from-gray-500 to-gray-600',
+// ─── Colors (solid fallback for gradients) ───
+const SOLID_COLORS = {
+  blue: 'bg-blue-600',
+  green: 'bg-emerald-600',
+  orange: 'bg-orange-600',
+  purple: 'bg-purple-600',
+  red: 'bg-red-600',
+  teal: 'bg-teal-600',
+  indigo: 'bg-indigo-600',
+  pink: 'bg-pink-600',
+  cyan: 'bg-cyan-600',
+  yellow: 'bg-yellow-600',
+  gray: 'bg-gray-600',
 };
 
-const GradientKpiCard = ({ title, value, icon: Icon, trend, trendLabel, gradient, subtitle, color = 'text-white' }) => (
-  <Card className={`border-0 shadow-xl rounded-xs overflow-hidden ${gradient}`}>
+// ─── Gradients (may or may not work; we keep both) ───
+const GRADIENTS = {
+  blue: 'from-blue-500 to-blue-600',
+  green: 'from-emerald-500 to-emerald-600',
+  orange: 'from-orange-500 to-orange-600',
+  purple: 'from-purple-500 to-purple-600',
+  red: 'from-red-500 to-red-600',
+  teal: 'from-teal-500 to-teal-600',
+  indigo: 'from-indigo-500 to-indigo-600',
+  pink: 'from-pink-500 to-pink-600',
+  cyan: 'from-cyan-500 to-cyan-600',
+  yellow: 'from-yellow-500 to-yellow-600',
+  gray: 'from-gray-500 to-gray-600',
+};
+
+// ─── KPI Card Component ───
+const GradientKpiCard = ({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  trendLabel,
+  gradient,
+  subtitle,
+  color = 'text-white',
+}) => (
+  <Card className={`border-0 shadow-xl rounded-sm overflow-hidden bg-gradient-to-br ${gradient}`}>
     <CardContent className="p-5">
       <div className="flex items-start justify-between">
         <div className="space-y-1 text-white">
@@ -99,7 +124,7 @@ const GradientKpiCard = ({ title, value, icon: Icon, trend, trendLabel, gradient
               ) : (
                 <ArrowDownRight className="h-3.5 w-3.5 text-white" />
               )}
-              <span className={`text-xs font-semibold ${trend >= 0 ? 'text-white' : 'text-white'}`}>
+              <span className={`text-xs font-semibold text-white`}>
                 {trend > 0 ? '+' : ''}{trend}%
               </span>
               <span className="text-xs text-white/70">{trendLabel || 'vs last month'}</span>
@@ -114,6 +139,7 @@ const GradientKpiCard = ({ title, value, icon: Icon, trend, trendLabel, gradient
   </Card>
 );
 
+// ─── Mini Stat ───
 const MiniStat = ({ label, value, icon: Icon, color = 'text-gray-600', bg = 'bg-gray-50' }) => (
   <div className={`flex items-center gap-3 p-3 ${bg} rounded-xl border border-gray-100`}>
     <div className={`p-2 rounded-lg bg-white shadow-sm ${color}`}>
@@ -126,17 +152,8 @@ const MiniStat = ({ label, value, icon: Icon, color = 'text-gray-600', bg = 'bg-
   </div>
 );
 
-const QuickAction = ({ icon: Icon, label, onClick, color = 'bg-gray-100 hover:bg-gray-200', iconColor = 'text-gray-600' }) => (
-  <button
-    onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl ${color} transition-colors duration-200 w-full border border-gray-200 shadow-sm hover:shadow-md`}
-  >
-    <Icon className={`h-5 w-5 ${iconColor}`} />
-    <span className="text-xs font-medium text-gray-700">{label}</span>
-  </button>
-);
-
-const ActivityItem = ({ time, title, description, type, icon: Icon }) => (
+// ─── Activity Item ───
+const ActivityItem = ({ time, title, description, icon: Icon }) => (
   <div className="flex items-start gap-3 py-3 border-b border-gray-100 last:border-0">
     <div className="p-1.5 bg-gray-100 rounded-full mt-0.5">
       <Icon className="h-3.5 w-3.5 text-gray-500" />
@@ -149,13 +166,12 @@ const ActivityItem = ({ time, title, description, type, icon: Icon }) => (
   </div>
 );
 
+// ─── Main Dashboard ───
 const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [inventory, setInventory] = useState([]);
-  const [recentSales, setRecentSales] = useState([]);
-  const [recentPurchases, setRecentPurchases] = useState([]);
   const [payments, setPayments] = useState({ received: 0, paid: 0 });
   const [fetchError, setFetchError] = useState(null);
 
@@ -246,8 +262,6 @@ const Dashboard = () => {
 
       setSales(salesData);
       setPurchases(purchasesData);
-      setRecentSales(salesData.slice(0, 5));
-      setRecentPurchases(purchasesData.slice(0, 5));
     } catch (error) {
       console.error('❌ Error fetching dashboard data:', error);
       setFetchError(error.message || 'Failed to load dashboard data');
@@ -261,7 +275,7 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  // ── Computed metrics with fallbacks ──
+  // ── Computed metrics ──
   const totalItems = inventory.length;
   const totalStockValue = inventory.reduce((sum, i) => sum + (i.totalCost || 0), 0);
   const totalRevenue = sales
@@ -309,7 +323,7 @@ const Dashboard = () => {
   const lowStockItems = inventory.filter(i => i.quantity < 10).length;
   const outOfStock = inventory.filter(i => i.quantity <= 0).length;
 
-  // ── Charts (with safe fallbacks) ──
+  // ── Charts ──
   const revenueData = useMemo(() => {
     const days = 30;
     const today = new Date();
@@ -417,10 +431,10 @@ const Dashboard = () => {
   }, [purchases]);
 
   const activities = [
-    { time: '10:35', title: 'Invoice #1005 created', description: 'Customer: Ahmad Traders, Amount: ₨ 12,000', type: 'sale', icon: FileText },
-    { time: '10:22', title: 'Purchase #501 approved', description: 'Supplier: ABC Traders, Amount: ₨ 8,500', type: 'purchase', icon: Truck },
-    { time: '09:58', title: 'Inventory adjusted', description: 'Store 1: +50 units of Item X', type: 'inventory', icon: Package },
-    { time: '09:20', title: 'Payment received', description: 'From Ahmad Traders, ₨ 5,000', type: 'payment', icon: CreditCard },
+    { time: '10:35', title: 'Invoice #1005 created', description: 'Customer: Ahmad Traders, Amount: ₨ 12,000', icon: FileText },
+    { time: '10:22', title: 'Purchase #501 approved', description: 'Supplier: ABC Traders, Amount: ₨ 8,500', icon: Truck },
+    { time: '09:58', title: 'Inventory adjusted', description: 'Store 1: +50 units of Item X', icon: Package },
+    { time: '09:20', title: 'Payment received', description: 'From Ahmad Traders, ₨ 5,000', icon: CreditCard },
   ];
 
   const alerts = [
@@ -437,9 +451,9 @@ const Dashboard = () => {
   const stockTurnover = avgInventory > 0 ? totalPurchasesValue / avgInventory : 0;
 
   return (
-    <div className="min-h-screen space-y-6">
+    <div className="min-h-screen p-6 space-y-6 bg-slate-50">
       {/* ─── Header ─── */}
-      <div className="bg-white rounded-xs shadow-xl border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-sm shadow-xl border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -629,7 +643,7 @@ const Dashboard = () => {
 
       {/* ─── Charts ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden lg:col-span-2">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-gray-900">Revenue Trend</CardTitle>
             <CardDescription className="text-xs text-gray-500">Last 30 days</CardDescription>
@@ -653,7 +667,7 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-gray-900">Cash Flow</CardTitle>
             <CardDescription className="text-xs text-gray-500">Last 7 days</CardDescription>
@@ -676,7 +690,7 @@ const Dashboard = () => {
 
       {/* ─── Sales vs Purchase + Expenses Breakdown ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-gray-900">Sales vs Purchases</CardTitle>
             <CardDescription className="text-xs text-gray-500">Last 6 months</CardDescription>
@@ -696,7 +710,7 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-gray-900">Expenses Breakdown</CardTitle>
             <CardDescription className="text-xs text-gray-500">By category</CardDescription>
@@ -727,7 +741,7 @@ const Dashboard = () => {
 
       {/* ─── Inventory Widget ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden lg:col-span-2">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-gray-900">Inventory by Location</CardTitle>
             <CardDescription className="text-xs text-gray-500">Current stock levels</CardDescription>
@@ -758,7 +772,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Alerts Panel */}
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <Bell className="h-4 w-4 text-yellow-500" />
@@ -780,7 +794,7 @@ const Dashboard = () => {
 
       {/* ─── Top Customers & Suppliers ─── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-gray-900">Top Customers</CardTitle>
           </CardHeader>
@@ -803,7 +817,7 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-gray-900">Top Suppliers</CardTitle>
           </CardHeader>
@@ -829,7 +843,7 @@ const Dashboard = () => {
 
       {/* ─── Recent Activities ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
+        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-gray-900">Recent Activities</CardTitle>
           </CardHeader>
