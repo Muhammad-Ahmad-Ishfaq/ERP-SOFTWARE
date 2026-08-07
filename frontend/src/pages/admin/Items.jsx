@@ -206,6 +206,7 @@ const Items = () => {
     setIsDeleting(true);
     try {
       await api.delete(`/inventory/items/${itemToDelete.ITEM_ID}/`);
+      // Success – item was soft-deleted (deactivated)
       setItems((prevItems) => prevItems.filter((i) => i.ITEM_ID !== itemToDelete.ITEM_ID));
       toast.success(`"${itemToDelete.ITEM_NAME}" deactivated successfully`);
       setDeleteDialogOpen(false);
@@ -213,18 +214,23 @@ const Items = () => {
     } catch (error) {
       console.error('❌ Error deleting item:', error);
       
-      // Handle backend error (e.g., PROTECT violation)
+      // Handle backend error – item is referenced and cannot be deleted
       let errorMsg = 'Failed to delete item.';
       if (error.response?.status === 400) {
-        errorMsg = error.response.data?.error || 'This item is used in purchases, sales, or orders and cannot be deleted.';
+        // Backend returns a detailed error message
+        errorMsg = error.response.data?.error || 
+                   'This item is used in purchases, sales, or orders and cannot be deleted.';
       } else if (error.response?.status === 403) {
         errorMsg = 'You do not have permission to delete this item.';
       } else if (error.response?.status === 404) {
         errorMsg = 'Item not found.';
       }
       toast.error(errorMsg);
+      // ✅ Do NOT remove the item from the list – it stays
     } finally {
       setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
     }
   };
 
@@ -780,7 +786,11 @@ const Items = () => {
               Are you sure you want to delete the item{' '}
               <span className="font-semibold text-gray-700">"{itemToDelete?.ITEM_NAME}"</span>?
               <br />
-              <span className="text-xs text-gray-400">This will deactivate the item if it is not used in any transaction. If it is referenced in purchases, sales, or orders, deletion will be blocked.</span>
+              <span className="text-xs text-gray-400">
+                If this item is referenced in any <strong>Purchase, Sale, Voucher, or Order</strong>,
+                deletion will be blocked and you will see a detailed error message.
+                Otherwise, it will be deactivated (soft delete) and removed from the list.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

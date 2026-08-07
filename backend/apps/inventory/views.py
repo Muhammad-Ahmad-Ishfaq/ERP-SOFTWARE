@@ -1,7 +1,7 @@
 # apps/inventory/views.py
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-from django.db.models import ProtectedError
+from rest_framework.decorators import action
 from .models import Item, Unit
 from .serializers import ItemSerializer, UnitSerializer
 from apps.purchases.models import PurchaseDetail
@@ -16,7 +16,7 @@ class UnitViewSet(viewsets.ModelViewSet):
 
 
 class ItemViewSet(viewsets.ModelViewSet):
-    queryset = Item.objects.all()  # uses custom manager (active items only)
+    queryset = Item.objects.all()
     serializer_class = ItemSerializer
 
     def get_queryset(self):
@@ -28,30 +28,43 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Override delete: if the item is referenced in any transaction, 
-        soft‑delete (set STATUS=False) instead of hard delete.
-        If not referenced, hard delete is allowed.
+        Soft‑delete: set STATUS=False only if the item is not referenced.
         """
         item = self.get_object()
 
-        # Check for references in all transaction tables
+        # Check references
         used_in_purchases = PurchaseDetail.objects.filter(item_code=item).exists()
         used_in_sales = SaleDetail.objects.filter(item_code=item).exists()
         used_in_purchase_orders = PurchaseOrderDetail.objects.filter(item_code=item).exists()
         used_in_sale_orders = SaleOrderDetail.objects.filter(item_code=item).exists()
 
-        if used_in_purchases or used_in_sales or used_in_purchase_orders or used_in_sale_orders:
-            # ✅ Soft delete – mark as inactive and return a message
-            item.STATUS = False
-            item.save()
-            return Response(
-                {"detail": "Item is used in transactions. It has been deactivated (soft delete)."},
-                status=status.HTTP_200_OK
+        if any([used_in_purchases, used_in_sales, used_in_purchase_orders, used_in_sale_orders]):
+            # Build a detailed message
+            references = []
+            if used_in_purchases: references.append("Purchases")
+            if used_in_sales: references.append("Sales")
+            if used_in_purchase_orders: references.append("Purchase Orders")
+            if used_in_sale_orders: references.append("Sale Orders")
+            error_msg = (
+                f"This item is referenced in the following transactions: "
+                f"{', '.join(references)}. It cannot be deleted or deactivated."
             )
-        else:
-            # ✅ No references – allow physical deletion
-            item.delete()
             return Response(
-                {"detail": "Item deleted successfully."},
-                status=status.HTTP_204_NO_CONTENT
+                {"error": error_msg},
+                status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Soft delete (deactivate)
+        item.STATUS = False
+        item.save()
+        return Response(
+            {'detail': 'Item deactivated successfully.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+    @action(detail=True, methods=['post'])
+    def reactivate(self, request, pk=None):
+        item = self.get_object()
+        item.STATUS = True
+        item.save()
+        return Response({'detail': 'Item reactivated successfully.'})
