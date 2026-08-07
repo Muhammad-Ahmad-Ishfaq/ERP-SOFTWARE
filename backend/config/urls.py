@@ -1,6 +1,12 @@
 from django.contrib import admin
 from django.urls import path, include
 
+def home(request):
+    return JsonResponse({
+        "message": "ERP Software API is running",
+        "status": "success"
+    })
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('apps.users.urls')),
