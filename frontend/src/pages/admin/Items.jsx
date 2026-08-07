@@ -25,7 +25,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
-import { Plus, Pencil, Trash2, Search, Package, Ruler, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, Ruler, X, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 import AddItemModal from '@/components/Inventory/AddItemModal';
@@ -207,12 +207,22 @@ const Items = () => {
     try {
       await api.delete(`/inventory/items/${itemToDelete.ITEM_ID}/`);
       setItems((prevItems) => prevItems.filter((i) => i.ITEM_ID !== itemToDelete.ITEM_ID));
-      toast.success(`"${itemToDelete.ITEM_NAME}" deleted successfully`);
+      toast.success(`"${itemToDelete.ITEM_NAME}" deactivated successfully`);
       setDeleteDialogOpen(false);
       setItemToDelete(null);
     } catch (error) {
       console.error('❌ Error deleting item:', error);
-      toast.error('Failed to delete item');
+      
+      // Handle backend error (e.g., PROTECT violation)
+      let errorMsg = 'Failed to delete item.';
+      if (error.response?.status === 400) {
+        errorMsg = error.response.data?.error || 'This item is used in purchases, sales, or orders and cannot be deleted.';
+      } else if (error.response?.status === 403) {
+        errorMsg = 'You do not have permission to delete this item.';
+      } else if (error.response?.status === 404) {
+        errorMsg = 'Item not found.';
+      }
+      toast.error(errorMsg);
     } finally {
       setIsDeleting(false);
     }
@@ -483,7 +493,7 @@ const Items = () => {
                               </span>
                             </TableCell>
                             <TableCell className="text-center py-3 px-4 border-b border-gray-200">
-                              <div className="flex items-center ">
+                              <div className="flex items-center">
                                 <Button variant="ghost" size="sm" onClick={() => handleEditClick(item)} className="h-8 w-8 p-0 hover:bg-green-100 hover:text-green-600 rounded-xs text-green-600">
                                   <Pencil className="h-4 w-4" />
                                 </Button>
@@ -584,7 +594,7 @@ const Items = () => {
         </TabsContent>
       </Tabs>
 
-      {/* ===== PROFESSIONAL UNIT MODAL - SOLID WHITE BACKGROUND ===== */}
+      {/* ===== PROFESSIONAL UNIT MODAL ===== */}
       <Sheet open={isUnitModalOpen} onOpenChange={setIsUnitModalOpen}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto p-0 bg-white">
           <div className="flex flex-col h-full bg-white">
@@ -612,10 +622,8 @@ const Items = () => {
               </div>
             </div>
 
-            {/* Body - Solid White Background */}
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 bg-white">
               <form onSubmit={handleUnitSubmit} className="space-y-4">
-                {/* Unit Name */}
                 <div>
                   <Label htmlFor="unitName" className="text-xs font-medium text-gray-600 block mb-1">
                     Unit Name <span className="text-red-500">*</span>
@@ -630,7 +638,6 @@ const Items = () => {
                   />
                 </div>
 
-                {/* Short Name */}
                 <div>
                   <Label htmlFor="shortName" className="text-xs font-medium text-gray-600 block mb-1">
                     Short Name <span className="text-red-500">*</span>
@@ -645,7 +652,6 @@ const Items = () => {
                   />
                 </div>
 
-                {/* Status */}
                 <div className="pt-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium text-gray-600">Status</Label>
@@ -673,7 +679,6 @@ const Items = () => {
                   </div>
                 </div>
 
-                {/* Toggle Preview */}
                 <button
                   type="button"
                   onClick={() => setShowUnitPreview(!showUnitPreview)}
@@ -683,7 +688,6 @@ const Items = () => {
                   {showUnitPreview ? 'Hide Preview' : 'Show Preview'}
                 </button>
 
-                {/* Live Preview */}
                 {showUnitPreview && (
                   <div className="bg-gray-50 rounded-xs border border-gray-200 p-4">
                     <div className="flex items-center justify-between mb-3">
@@ -714,7 +718,6 @@ const Items = () => {
               </form>
             </div>
 
-            {/* Footer */}
             <div className="border-t border-gray-100 px-6 py-3 flex justify-end gap-2.5 bg-white sticky bottom-0">
               <Button
                 type="button"
@@ -777,7 +780,7 @@ const Items = () => {
               Are you sure you want to delete the item{' '}
               <span className="font-semibold text-gray-700">"{itemToDelete?.ITEM_NAME}"</span>?
               <br />
-              <span className="text-xs text-gray-400">This action cannot be undone.</span>
+              <span className="text-xs text-gray-400">This will deactivate the item if it is not used in any transaction. If it is referenced in purchases, sales, or orders, deletion will be blocked.</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
