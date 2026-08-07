@@ -162,7 +162,7 @@ const Dashboard = () => {
   const [inventory, setInventory] = useState([]);
   const [recentSales, setRecentSales] = useState([]);
   const [recentPurchases, setRecentPurchases] = useState([]);
-  const [payments, setPayments] = useState({ received: 0, paid: 0 }); // received from customers, paid to suppliers
+  const [payments, setPayments] = useState({ received: 0, paid: 0 });
 
   const fetchData = async () => {
     setLoading(true);
@@ -216,46 +216,14 @@ const Dashboard = () => {
       setInventory(inventoryData);
 
       // ─── Compute payments from JV vouchers ───
-      // Payment to supplier: debit to creditor (sub='creditor') account
-      // Payment received from customer: credit to debtor (sub='debtor') account? Actually:
-      // When customer pays: Debit Cash, Credit Customer (debtor) – so customer account gets credited.
-      // But we need to track total received from customers: sum of credits to debtor accounts.
-      // And total paid to suppliers: sum of debits to creditor accounts.
-      // We can fetch all JV details and aggregate per account.
-      let totalPaidToSuppliers = 0;
-      let totalReceivedFromCustomers = 0;
-      for (const voucher of vouchersData) {
-        const detailsRes = await api.get(`/accounting/vouchers/${voucher.id}/`);
-        const details = detailsRes.data.details || [];
-        for (const detail of details) {
-          const accountCode = detail.account_code;
-          const debit = parseFloat(detail.debit) || 0;
-          const credit = parseFloat(detail.credit) || 0;
-          // We need to know the account type (sub) to classify.
-          // We can fetch parties separately, but to avoid extra calls, we'll assume:
-          // - Supplier accounts are those used in PurchaseMaster (creditor)
-          // - Customer accounts are those used in SaleMaster (debtor)
-          // We can infer from sales/purchases data.
-          // For simplicity, we'll accumulate debits to creditor accounts and credits to debtor accounts.
-          // We'll fetch parties in a separate call (or use cached) – but we already have sales/purchases.
-          // Let's just aggregate by account code and later map to debtor/creditor.
-          // For now, we'll compute total paid and received using the business logic from Payments.jsx:
-          // Payment to supplier = debit to account that appears as creditor in purchases.
-          // Payment received from customer = credit to account that appears as debtor in sales.
-          // We'll create a map of account codes from sales/purchases.
-          // We'll do that after we have the lists.
-        }
-      }
-
-      // Better: fetch parties once to know sub types.
       const partiesRes = await api.get('/accounting/parties/');
       const parties = partiesRes.data || [];
       const partyMap = {};
       parties.forEach(p => { partyMap[p.id] = p.sub; });
 
-      // Now process JV details again to sum.
-      totalPaidToSuppliers = 0;
-      totalReceivedFromCustomers = 0;
+      let totalPaidToSuppliers = 0;
+      let totalReceivedFromCustomers = 0;
+
       for (const voucher of vouchersData) {
         const detailsRes = await api.get(`/accounting/vouchers/${voucher.id}/`);
         const details = detailsRes.data.details || [];
@@ -333,19 +301,15 @@ const Dashboard = () => {
     return s.stts !== 'C' && new Date() > dueDate;
   }).length;
 
-  // Compute outstanding receivables and payables based on payments.
-  // We need to get total invoice amounts per customer/supplier and subtract payments.
-  // For simplicity, we'll compute total receivables as sum of all completed sales amounts minus total received from customers.
-  // Total payables as sum of all completed purchase amounts minus total paid to suppliers.
-  const totalReceivables = totalRevenue - payments.received;
-  const totalPayables = totalPurchasesValue - payments.paid;
+  // ✅ Correct outstanding receivables and payables (never negative)
+  const outstandingReceivables = Math.max(0, totalRevenue - payments.received);
+  const outstandingPayables = Math.max(0, totalPurchasesValue - payments.paid);
 
-  // We'll also compute net cash flow = received - paid.
   const netCashFlow = payments.received - payments.paid;
 
-  // Supplier payables remaining (from payments page logic)
-  // We'll compute as total payables.
-  const supplierPayables = totalPayables;
+  // Cash/Bank balances – use base values (adjust when real accounts are available)
+  const cashBalance = netCashFlow + 50000;  // ₨50,000 base (replace with actual cash account)
+  const bankBalance = netCashFlow + 20000;  // ₨20,000 base (replace with actual bank account)
 
   // Low stock items (threshold 10)
   const lowStockItems = inventory.filter(i => i.quantity < 10).length;
@@ -475,9 +439,9 @@ const Dashboard = () => {
 
   // ── Alerts ──
   const alerts = [
-    { severity: 'danger', message: '8 invoices overdue', icon: AlertTriangle },
-    { severity: 'warning', message: '4 products low stock', icon: AlertCircle },
-    { severity: 'warning', message: '2 purchase orders pending', icon: Bell },
+    { severity: 'danger', message: `${overdueInvoices} invoices overdue`, icon: AlertTriangle },
+    { severity: 'warning', message: `${lowStockItems} products low stock`, icon: AlertCircle },
+    { severity: 'warning', message: `${pendingOrders} orders pending`, icon: Bell },
     { severity: 'info', message: '1 backup not created', icon: AlertCircle },
   ];
 
@@ -528,7 +492,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ─── Gradient KPI Cards ─── */}
+      {/* ─── 24 KPI Cards ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <GradientKpiCard
           title="Revenue"
@@ -561,14 +525,14 @@ const Dashboard = () => {
         />
         <GradientKpiCard
           title="Cash Balance"
-          value={`₨ ${(payments.received - payments.paid + 50000).toFixed(0)}`}
+          value={`₨ ${cashBalance.toFixed(0)}`}
           icon={Wallet}
           gradient={GRADIENTS.teal}
           trend={15}
         />
         <GradientKpiCard
           title="Bank Balance"
-          value={`₨ ${(payments.received - payments.paid + 20000).toFixed(0)}`}
+          value={`₨ ${bankBalance.toFixed(0)}`}
           icon={Building}
           gradient={GRADIENTS.cyan}
           trend={7}
@@ -597,7 +561,7 @@ const Dashboard = () => {
         />
         <GradientKpiCard
           title="Outstanding Receivables"
-          value={`₨ ${totalReceivables.toFixed(0)}`}
+          value={`₨ ${outstandingReceivables.toFixed(0)}`}
           icon={Receipt}
           gradient={GRADIENTS.red}
         />
@@ -617,8 +581,8 @@ const Dashboard = () => {
           gradient={GRADIENTS.pink}
         />
         <GradientKpiCard
-          title="Supplier Payables"
-          value={`₨ ${supplierPayables.toFixed(0)}`}
+          title="Outstanding Payables"
+          value={`₨ ${outstandingPayables.toFixed(0)}`}
           icon={Users}
           gradient={GRADIENTS.purple}
         />
@@ -657,16 +621,16 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Additional Cards for Payments */}
+      {/* Payment Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <GradientKpiCard
-          title="Received from Customers"
+          title="Payments Received"
           value={`₨ ${payments.received.toFixed(0)}`}
           icon={DollarSign}
           gradient={GRADIENTS.green}
         />
         <GradientKpiCard
-          title="Paid to Suppliers"
+          title="Payments Made"
           value={`₨ ${payments.paid.toFixed(0)}`}
           icon={CreditCard}
           gradient={GRADIENTS.red}
@@ -679,7 +643,7 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* ─── Charts: Revenue + Cash Flow ─── */}
+      {/* ─── Charts ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden lg:col-span-2">
           <CardHeader className="pb-2">
@@ -879,7 +843,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* ─── Recent Activities Timeline ─── */}
+      {/* ─── Recent Activities ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-xs overflow-hidden">
           <CardHeader>
