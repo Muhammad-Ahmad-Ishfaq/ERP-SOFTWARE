@@ -69,7 +69,9 @@ import {
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
-// ─── Colors (solid fallback for gradients) ───
+// ─── Colors ───
+const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#14b8a6'];
+
 const SOLID_COLORS = {
   blue: 'bg-blue-600',
   green: 'bg-emerald-600',
@@ -84,7 +86,6 @@ const SOLID_COLORS = {
   gray: 'bg-gray-600',
 };
 
-// ─── Gradients (may or may not work; we keep both) ───
 const GRADIENTS = {
   blue: 'from-blue-500 to-blue-600',
   green: 'from-emerald-500 to-emerald-600',
