@@ -11,12 +11,13 @@ class PurchaseMaster(models.Model):
     vno = models.IntegerField(db_column='VNO')
     vdate = models.DateField(db_column='VDATE')
     dc_no = models.CharField(max_length=10, db_column='DC_NO', blank=True, null=True)
+    # ✅ Keep nullable but PROTECT when set
     account_code = models.ForeignKey(
         Party,
         on_delete=models.PROTECT,
         db_column='ACCOUNT_CODE',
         related_name='purchase_accounts',
-        null=True,          # ✅ keep nullable
+        null=True,
         blank=True
     )
     purchase_code = models.ForeignKey(

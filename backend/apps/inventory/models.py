@@ -20,7 +20,7 @@ class Unit(models.Model):
 
 
 class ItemManager(models.Manager):
-    """Custom manager to return only active items by default."""
+    """Return only active items by default."""
     def get_queryset(self):
         return super().get_queryset().filter(STATUS=True)
 
@@ -63,7 +63,6 @@ class Item(models.Model):
     CREATED_AT = models.DateTimeField(auto_now_add=True)
     UPDATED_AT = models.DateTimeField(auto_now=True)
 
-    # ✅ Use custom manager
     objects = ItemManager()
     all_objects = models.Manager()  # includes inactive items
 
