@@ -69,9 +69,16 @@ const AddCompanyModal = ({ open, onOpenChange, onSave, editingCompany, isStandal
         setForm(emptyForm);
       }
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to save company');
-    } finally {
+  console.log("FULL ERROR:", error);
+  console.log("STATUS:", error.response?.status);
+  console.log("DATA:", error.response?.data);
+
+  toast.error(
+    error.response?.data?.detail ||
+    error.response?.data?.message ||
+    "Failed to save company"
+  );
+} finally {
       setLoading(false);
     }
   };
