@@ -90,6 +90,7 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
         if customer.sub != 'debtor':
             raise serializers.ValidationError({"account_code": "Selected account is not a debtor."})
 
+        # Get sale account from AC_SETUP
         setup = ACSetup.objects.first()
         if not setup:
             raise serializers.ValidationError({"sale_code": "AC_SETUP configuration not found."})
@@ -151,16 +152,26 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
 
         for detail in details_data:
             location = detail.pop('location', None)
-            SaleDetail.objects.create(
-                vtype=sale.vtype,
-                vno=sale.vno,
-                sale_master=sale,
-                location=location,
-                **detail
-            )
+            try:
+                # ✅ Create the detail – model's save() will compute weight_lbs
+                SaleDetail.objects.create(
+                    vtype=sale.vtype,
+                    vno=sale.vno,
+                    sale_master=sale,
+                    location=location,
+                    **detail
+                )
+            except Exception as e:
+                print(f"❌ ERROR creating SaleDetail: {e}")
+                print(f"❌ Detail data: {detail}")
+                raise serializers.ValidationError(f"Failed to create sale detail: {str(e)}")
 
         if sale.stts == 'C':
-            self._create_voucher(sale)
+            try:
+                self._create_voucher(sale)
+            except Exception as e:
+                print(f"❌ ERROR creating voucher: {e}")
+                raise serializers.ValidationError(f"Failed to create voucher: {str(e)}")
         return sale
 
     @transaction.atomic
@@ -197,6 +208,7 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
         customer = sale.account_code
         sale_account = sale.sale_code
         if not customer or not sale_account:
+            print("⚠️ Missing customer or sale_account, skipping voucher creation")
             return
 
         net_amount = total_amount - (sale.discount or Decimal('0.00'))

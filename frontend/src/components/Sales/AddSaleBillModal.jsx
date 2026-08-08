@@ -15,7 +15,7 @@ const statusOptions = [
 
 const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   const [loading, setLoading] = useState(false);
-  const [nextVoucherNo, setNextVoucherNo] = useState(1);
+  const [nextVoucherNo, setNextVoucherNo] = useState(null); // for display and submission
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -181,6 +181,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
         setMaster(prev => ({ ...prev, vno: next }));
       } catch (fallbackError) {
         setNextVoucherNo(1);
+        setMaster(prev => ({ ...prev, vno: 1 }));
       }
     }
   };
@@ -362,7 +363,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       if (selectedItem) {
         updated.uom = selectedItem.UOM?.UOM_ID || '';
         updated.weight_kg = parseFloat(selectedItem.WEIGHT_KG) || 0;
-        updated = recalcRow(updated); // auto‑compute weight_lbs & amount
+        updated = recalcRow(updated);
         const loc = updated.location;
         updated.available_stock = getAvailableStock(value, loc);
       }
@@ -477,6 +478,10 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       toast.error('Customer is required');
       return;
     }
+    if (!master.vno) {
+      toast.error('Voucher number not available. Please refresh.');
+      return;
+    }
     const filledDetails = details.filter(
       (d) => d.item_code && d.uom && d.qty > 0 && d.rate > 0
     );
@@ -486,9 +491,10 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     }
     setLoading(true);
     try {
+      // ── Include vno (already fetched from backend) ──
       const payload = {
         vtype: 'SB',
-        vno: nextVoucherNo,
+        vno: master.vno,
         vdate: master.vdate,
         dc_no: master.dc_no || '',
         account_code: parseInt(master.account_code),
@@ -603,16 +609,16 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-2">
-              {/* Row 1: Bill No, Date, DC No */}
+              {/* Row 1: Bill No (auto-generated), Date, DC No */}
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center justify-center gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-900 mb-1">
-                      Bill No <span className="text-red-400">*</span>
+                      Bill No <span className="text-gray-400 text-xs">(auto)</span>
                     </label>
                     <input
                       type="text"
-                      value={nextVoucherNo || ''}
+                      value={master.vno || '...'}
                       readOnly
                       className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 opacity-70 cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-green-500"
                     />

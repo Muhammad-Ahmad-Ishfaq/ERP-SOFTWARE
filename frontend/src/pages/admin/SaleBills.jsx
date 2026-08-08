@@ -82,6 +82,25 @@ const SearchBar = ({ value, onChange, placeholder }) => (
   </div>
 );
 
+// ─── Compute totals from details ───
+const computeTotals = (bill) => {
+  const details = bill.details || [];
+  const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
+  const grandTotal = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+  const totalWeightKg = details.reduce((sum, d) => sum + (parseFloat(d.weight_kg) || 0), 0);
+  const totalWeightLbs = details.reduce((sum, d) => sum + (parseFloat(d.weight_lbs) || 0), 0);
+  return { totalQty, grandTotal, totalWeightKg, totalWeightLbs };
+};
+
+// ─── Get distinct locations from details ───
+const getLocations = (bill) => {
+  const details = bill.details || [];
+  const locs = details
+    .map(d => d.location_display || d.location_name || '')
+    .filter(Boolean);
+  return [...new Set(locs)].join(', ') || '-';
+};
+
 // ─── Main Component ───
 const SaleBills = () => {
   const [loading, setLoading] = useState(false);
@@ -113,13 +132,6 @@ const SaleBills = () => {
     fetchData();
   }, []);
 
-  const computeTotals = (bill) => {
-    const details = bill.details || [];
-    const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
-    const grandTotal = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
-    return { totalQty, grandTotal };
-  };
-
   const filtered = useMemo(() => {
     if (!search.trim()) return saleBills;
     const q = search.toLowerCase();
@@ -127,7 +139,8 @@ const SaleBills = () => {
       (p) =>
         p.vtype?.toLowerCase().includes(q) ||
         String(p.vno).includes(q) ||
-        p.account_code_display?.toLowerCase().includes(q)
+        p.account_code_display?.toLowerCase().includes(q) ||
+        getLocations(p).toLowerCase().includes(q)
     );
   }, [saleBills, search]);
 
@@ -188,30 +201,33 @@ const SaleBills = () => {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Voucher</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Qty</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Grand Total</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="w-24 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="w-12 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">VNO</th>
+                <th className="px-5 py-3 border-r border-gray-300 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
+                <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
+                <th className="w-24 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Quantity</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (kg)</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (lbs)</th>
+                <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Grand Total</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="w-28 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-5 py-12 text-center">
+                  <td colSpan="10" className="px-5 py-12 text-center">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-gray-600" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="7">
+                  <td colSpan="10">
                     <EmptyState
                       icon={ShoppingCart}
                       title="No sale bills found"
                       description="Create your first sale bill to track sales to customers."
-                    //   actionLabel="Add Bill"
+                      // actionLabel="Add Bill"
                       onAction={() => {
                         setEditingSaleBill(null);
                         setModalOpen(true);
@@ -221,31 +237,41 @@ const SaleBills = () => {
                 </tr>
               ) : (
                 filtered.map((p) => {
-                  const { totalQty, grandTotal } = computeTotals(p);
+                  const { totalQty, grandTotal, totalWeightKg, totalWeightLbs } = computeTotals(p);
+                  const locations = getLocations(p);
                   return (
                     <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex font-mono text-sm font-medium bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded border border-gray-200">
-                          {p.vtype}-{String(p.vno).padStart(4, '0')}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-yellow-700">
                         {new Date(p.vdate).toLocaleDateString()}
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-900">
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300">
+                        <span className="inline-flex font-mono text-sm font-medium text-gray-700">
+                          {p.vno}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-gray-900">
                         {p.account_code_display || '-'}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-medium text-gray-700">
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center text-sm text-gray-700">
+                        {locations}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-right font-medium text-blue-700">
                         {totalQty.toFixed(3)}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-medium text-gray-900">
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-gray-700">
+                        {totalWeightKg.toFixed(3)}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-gray-700">
+                        {totalWeightLbs.toFixed(3)}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-green-700">
                         ₨ {grandTotal.toFixed(2)}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center border-r border-b border-gray-300">
                         <StatusBadge status={p.stts} />
                       </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-3.5 border-b border-gray-300 text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => {
                               setEditingSaleBill(p);

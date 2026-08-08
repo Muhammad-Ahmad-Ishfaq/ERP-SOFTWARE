@@ -450,7 +450,7 @@ const Dashboard = () => {
   const stockTurnover = avgInventory > 0 ? totalPurchasesValue / avgInventory : 0;
 
   return (
-    <div className="min-h-screen p-6 space-y-6 bg-slate-50">
+    <div className="min-h-screen space-y-6 bg-slate-50">
       {/* ─── Header ─── */}
       <div className="bg-white rounded-sm shadow-xl border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
