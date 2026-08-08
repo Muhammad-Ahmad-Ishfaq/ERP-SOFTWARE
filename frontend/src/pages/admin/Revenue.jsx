@@ -84,7 +84,7 @@ const computeSaleTotals = (sale) => {
   const totalAmount = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
   const discount = parseFloat(sale.discount) || 0;
   const netAmount = totalAmount - (totalAmount * discount) / 100; // if discount is percentage
-  // Alternatively, if discount is flat amount, use: netAmount = totalAmount - discount;
+  // Alternative if discount is flat: netAmount = totalAmount - discount;
   return { totalQty, totalAmount, netAmount };
 };
 
@@ -93,13 +93,36 @@ const Revenue = () => {
   const [loading, setLoading] = useState(false);
   const [sales, setSales] = useState([]);
   const [search, setSearch] = useState('');
+  const [detailsMap, setDetailsMap] = useState({});
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const res = await api.get('/sales/sale-master/');
-      // Only completed sales are considered revenue, but we can show all and filter later
-      setSales(res.data);
+      const salesData = res.data || [];
+      setSales(salesData);
+
+      // If details are not included in the list response, fetch them per sale
+      // Check if first sale has details
+      if (salesData.length > 0 && !salesData[0].details) {
+        const promises = salesData.map(async (sale) => {
+          const detailRes = await api.get(`/sales/sale-master/${sale.id}/`);
+          return { id: sale.id, details: detailRes.data.details || [] };
+        });
+        const results = await Promise.all(promises);
+        const map = {};
+        results.forEach(({ id, details }) => {
+          map[id] = details;
+        });
+        setDetailsMap(map);
+      } else {
+        // Otherwise, build map from existing details
+        const map = {};
+        salesData.forEach((sale) => {
+          map[sale.id] = sale.details || [];
+        });
+        setDetailsMap(map);
+      }
     } catch (error) {
       console.error(error);
       toast.error('Failed to load sales data');
@@ -112,22 +135,30 @@ const Revenue = () => {
     fetchData();
   }, []);
 
+  // ── Enrich sales with details ──
+  const enrichedSales = useMemo(() => {
+    return sales.map((sale) => {
+      const details = detailsMap[sale.id] || sale.details || [];
+      return { ...sale, details };
+    });
+  }, [sales, detailsMap]);
+
   // ── Filters ──
   const filteredSales = useMemo(() => {
-    if (!search.trim()) return sales;
+    if (!search.trim()) return enrichedSales;
     const q = search.toLowerCase();
-    return sales.filter(
+    return enrichedSales.filter(
       (s) =>
         s.vtype?.toLowerCase().includes(q) ||
         String(s.vno).includes(q) ||
         s.account_code_display?.toLowerCase().includes(q) ||
         s.remarks?.toLowerCase().includes(q)
     );
-  }, [sales, search]);
+  }, [enrichedSales, search]);
 
   // ── Summary stats (only completed sales for revenue) ──
   const summary = useMemo(() => {
-    const completed = sales.filter(s => s.stts === 'C');
+    const completed = enrichedSales.filter(s => s.stts === 'C');
     const totalRevenue = completed.reduce((sum, s) => {
       const { netAmount } = computeSaleTotals(s);
       return sum + netAmount;
@@ -139,7 +170,7 @@ const Revenue = () => {
     }, 0);
     const avgInvoice = totalInvoices > 0 ? totalRevenue / totalInvoices : 0;
     return { totalRevenue, totalInvoices, totalItemsSold, avgInvoice };
-  }, [sales]);
+  }, [enrichedSales]);
 
   return (
     <div>
@@ -155,13 +186,13 @@ const Revenue = () => {
             onChange={setSearch}
             placeholder="Search by customer, invoice..."
           />
-          {/* <Button
+          <Button
             onClick={fetchData}
             variant="outline"
             className="h-9 px-3 border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button> */}
+          </Button>
         </div>
       </div>
 
@@ -240,7 +271,7 @@ const Revenue = () => {
                 filteredSales.map((sale) => {
                   const { totalQty, netAmount } = computeSaleTotals(sale);
                   const locations = (sale.details || [])
-                    .map(d => d.location_display)
+                    .map(d => d.location_display || d.location_name || '')
                     .filter(Boolean);
                   const uniqueLocations = [...new Set(locations)].join(', ') || '-';
                   return (
