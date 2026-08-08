@@ -19,9 +19,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // ── Animation state ──
   const [isVisible, setIsVisible] = useState(false);
-
   useEffect(() => {
     if (open) {
       setIsVisible(false);
@@ -45,7 +43,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     user_no: '',
   });
 
-  // ── Dynamic detail rows ──
+  // ── Dynamic detail rows (no weight_per_unit) ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -53,7 +51,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     qty: 0,
     rate: 0,
     amount: 0,
-    weight_per_unit: 0,
     weight_kg: 0,
     weight_lbs: 0,
   });
@@ -74,7 +71,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
   const [itemQueries, setItemQueries] = useState({});
   const [uomQueries, setUomQueries] = useState({});
 
-  // ── Get logged-in user ID ──
+  // ── Helpers ──
   const getCurrentUserId = () => {
     try {
       const userData = localStorage.getItem('user');
@@ -88,7 +85,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     return 1;
   };
 
-  // ── Fetch next voucher number with fallback ──
   const fetchNextVoucherNo = async () => {
     try {
       const res = await api.get('/purchase-orders/purchase-orders/next-voucher/');
@@ -111,7 +107,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     }
   };
 
-  // ── Fetch dropdowns ──
   const fetchDropdowns = async () => {
     try {
       const [suppliersRes, itemsRes, unitsRes] = await Promise.all([
@@ -157,7 +152,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
         qty: d.qty || 0,
         rate: d.rate || 0,
         amount: d.amount || 0,
-        weight_per_unit: d.weight_per_unit || 0,
         weight_kg: d.weight_kg || 0,
         weight_lbs: d.weight_lbs || 0,
       }));
@@ -181,17 +175,13 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     }
   }, [editingPO, open, nextVoucherNo]);
 
-  // ── Recalculate weight and amount ──
+  // ── Recalculate lbs and amount from kg and rate ──
   const recalcRow = (row) => {
-    const qty = parseFloat(row.qty) || 0;
-    const weightPerUnit = parseFloat(row.weight_per_unit) || 0;
+    const weightKg = parseFloat(row.weight_kg) || 0;
     const rate = parseFloat(row.rate) || 0;
-
-    const weightKg = qty * weightPerUnit;
     const weightLbs = weightKg * 2.2046;
     const amount = weightLbs * rate;
-
-    return { ...row, weight_kg: weightKg, weight_lbs: weightLbs, amount };
+    return { ...row, weight_lbs: weightLbs, amount };
   };
 
   // ── Handlers ──
@@ -203,7 +193,8 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
-    if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
+    // Recalc only if kg or rate changes
+    if (field === 'weight_kg' || field === 'rate') {
       updated = recalcRow(updated);
     }
 
@@ -217,12 +208,11 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     }
   };
 
-  // ── Calculate total ──
   const calculateTotal = () => {
     return details.reduce((sum, d) => sum + (d.amount || 0), 0);
   };
 
-  // ── Get display values ──
+  // ── Display helpers ──
   const getSupplierDisplay = (id) => {
     if (!id) return '';
     const supplier = suppliers.find(s => s.id === parseInt(id));
@@ -244,13 +234,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     return item ? item.ITEM_NAME : '';
   };
 
-  // ── Get item weight from items list ──
-  const getItemWeight = (id) => {
-    const item = items.find(i => i.ITEM_ID === parseInt(id));
-    return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
-  };
-
-  // ── Filter functions ──
   const getFilteredSuppliers = (query) => {
     if (!query) return suppliers;
     const q = String(query).toLowerCase();
@@ -278,7 +261,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     );
   };
 
-  // ── Status helpers ──
   const getStatusColor = (status) => {
     const option = statusOptions.find(s => s.value === status);
     return option ? option.color : 'text-gray-400';
@@ -324,7 +306,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
           qty: parseFloat(d.qty),
           rate: parseFloat(d.rate),
           amount: parseFloat(d.amount),
-          weight_per_unit: parseFloat(d.weight_per_unit) || 0,
           weight_kg: parseFloat(d.weight_kg) || 0,
           weight_lbs: parseFloat(d.weight_lbs) || 0,
         })),
@@ -339,7 +320,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving PO:', error);
-      console.error('Response data:', error.response?.data);
       const errData = error.response?.data;
       if (errData && typeof errData === 'object') {
         const msg = Object.entries(errData)
@@ -354,7 +334,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     }
   };
 
-  // ── Close dropdown on outside click ──
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -486,7 +465,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
 
             {/* Row 2: Supplier */}
             <div className="grid grid-cols-5 gap-4 mb-3">
-              <div className="">
+              <div className="col-span-5">
                 <label className="block text-sm font-medium text-gray-900 mb-1">
                   Supplier/Vendor <span className="text-red-400">*</span>
                 </label>
@@ -541,7 +520,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
               />
             </div>
 
-            {/* Items Table – columns updated */}
+            {/* Items Table – updated columns */}
             <div className="overflow-hidden">
               <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
                 <h3 className="text-md font-semibold text-gray-900">Items</h3>
@@ -581,11 +560,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                           <td className="border-r border-b border-gray-300 p-0">
                             <Combobox
                               value={row.item_code}
-                              onChange={(val) => {
-                                handleDetailChange(index, 'item_code', val);
-                                const weight = getItemWeight(val);
-                                handleDetailChange(index, 'weight_per_unit', weight);
-                              }}
+                              onChange={(val) => handleDetailChange(index, 'item_code', val)}
                             >
                               <div className="relative">
                                 <Combobox.Input
@@ -686,8 +661,18 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                               placeholder="0"
                             />
                           </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                            {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                          <td className="border-r border-b border-gray-300">
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={row.weight_kg || ''}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleDetailChange(index, 'weight_kg', val);
+                              }}
+                              className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
+                              placeholder="0.000"
+                            />
                           </td>
                           <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
                             {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}

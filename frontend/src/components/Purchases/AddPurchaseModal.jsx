@@ -57,7 +57,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     user_no: '',
   });
 
-  // ── Dynamic detail rows ──
+  // ── Dynamic detail rows (no weight_per_unit) ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -66,7 +66,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     rate: 0,
     amount: 0,
     location: null,
-    weight_per_unit: 0,
     weight_kg: 0,
     weight_lbs: 0,
   });
@@ -89,7 +88,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
   const [uomQueries, setUomQueries] = useState({});
   const [locationQueries, setLocationQueries] = useState({});
 
-  // ── Get logged-in user ID ──
   const getCurrentUserId = () => {
     try {
       const userData = localStorage.getItem('user');
@@ -103,7 +101,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     return 1;
   };
 
-  // ── Helper to extract ID ──
   const getAccountId = (account) => {
     if (!account) return null;
     if (typeof account === 'number') return account;
@@ -112,7 +109,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     return null;
   };
 
-  // ── Fetch next voucher number ──
   const fetchNextVoucherNo = async () => {
     try {
       const res = await api.get('/purchases/purchase-master/');
@@ -128,7 +124,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     }
   };
 
-  // ── Fetch dropdowns ──
   const fetchDropdowns = async () => {
     try {
       const [accountsRes, itemsRes, unitsRes, locationsRes] = await Promise.all([
@@ -146,7 +141,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     }
   };
 
-  // ── Fetch pending purchase orders ──
   const fetchPendingPOs = async () => {
     setPoLoading(true);
     try {
@@ -165,7 +159,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     if (open) {
       const userId = getCurrentUserId();
       setMaster(prev => ({ ...prev, user_no: userId }));
-
       fetchDropdowns();
       fetchNextVoucherNo();
       if (isDrawerOpen) {
@@ -174,7 +167,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     }
   }, [open, isDrawerOpen]);
 
-  // ── Load edit data ──
   useEffect(() => {
     if (editingPurchase && open) {
       setMaster({
@@ -199,7 +191,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
         rate: d.rate || 0,
         amount: d.amount || 0,
         location: d.location || null,
-        weight_per_unit: d.weight_per_unit || 0,
         weight_kg: d.weight_kg || 0,
         weight_lbs: d.weight_lbs || 0,
       }));
@@ -227,7 +218,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     }
   }, [editingPurchase, open, nextVoucherNo]);
 
-  // ── Load PO data ──
   const loadPOData = (po) => {
     setMaster(prev => ({
       ...prev,
@@ -249,7 +239,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
       rate: d.rate || 0,
       amount: d.amount || 0,
       location: d.location || null,
-      weight_per_unit: d.weight_per_unit || 0,
       weight_kg: d.weight_kg || 0,
       weight_lbs: d.weight_lbs || 0,
     }));
@@ -275,20 +264,14 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     toast.success(`Purchase Order #${po.vno} loaded`);
   };
 
-  // ── Recalculate weight and amount ──
   const recalcRow = (row) => {
-    const qty = parseFloat(row.qty) || 0;
-    const weightPerUnit = parseFloat(row.weight_per_unit) || 0;
+    const weightKg = parseFloat(row.weight_kg) || 0;
     const rate = parseFloat(row.rate) || 0;
-
-    const weightKg = qty * weightPerUnit;
     const weightLbs = weightKg * 2.2046;
     const amount = weightLbs * rate;
-
-    return { ...row, weight_kg: weightKg, weight_lbs: weightLbs, amount };
+    return { ...row, weight_lbs: weightLbs, amount };
   };
 
-  // ── Handlers ──
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
   };
@@ -302,7 +285,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
-    if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
+    if (field === 'weight_kg' || field === 'rate') {
       updated = recalcRow(updated);
     }
 
@@ -347,12 +330,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
   const getItemName = (id) => {
     const item = items.find(i => i.ITEM_ID === parseInt(id));
     return item ? item.ITEM_NAME : '';
-  };
-
-  // ── Get item weight from items list ──
-  const getItemWeight = (id) => {
-    const item = items.find(i => i.ITEM_ID === parseInt(id));
-    return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
   };
 
   const getFilteredAccounts = (query) => {
@@ -444,7 +421,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
           rate: parseFloat(d.rate),
           amount: parseFloat(d.amount),
           location: d.location || null,
-          weight_per_unit: parseFloat(d.weight_per_unit) || 0,
           weight_kg: parseFloat(d.weight_kg) || 0,
           weight_lbs: parseFloat(d.weight_lbs) || 0,
         })),
@@ -459,8 +435,6 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
       onOpenChange(false);
     } catch (error) {
       console.error('Full error:', error);
-      console.error('Response data:', error.response?.data);
-      console.log("📤 Payload being sent:", payload);
       const errData = error.response?.data;
       if (errData && typeof errData === 'object') {
         const msg = Object.entries(errData)
@@ -698,11 +672,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                             <td className="border-r border-b border-gray-300 p-0">
                               <Combobox
                                 value={row.item_code}
-                                onChange={(val) => {
-                                  handleDetailChange(index, 'item_code', val);
-                                  const weight = getItemWeight(val);
-                                  handleDetailChange(index, 'weight_per_unit', weight);
-                                }}
+                                onChange={(val) => handleDetailChange(index, 'item_code', val)}
                               >
                                 <div className="relative">
                                   <Combobox.Input
@@ -844,8 +814,18 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                                 placeholder="0"
                               />
                             </td>
-                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                              {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                            <td className="border-r border-b border-gray-300">
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={row.weight_kg || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'weight_kg', val);
+                                }}
+                                className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
+                                placeholder="0.000"
+                              />
                             </td>
                             <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
                               {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
