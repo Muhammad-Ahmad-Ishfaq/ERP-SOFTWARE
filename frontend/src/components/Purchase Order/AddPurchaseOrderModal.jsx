@@ -203,7 +203,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
-    // Recalculate weight and amount for any relevant field change
     if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
       updated = recalcRow(updated);
     }
@@ -542,7 +541,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
               />
             </div>
 
-            {/* Items Table */}
+            {/* Items Table – columns updated */}
             <div className="overflow-hidden">
               <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
                 <h3 className="text-md font-semibold text-gray-900">Items</h3>
@@ -559,11 +558,10 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                       <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
                       <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-24">UOM</th>
                       <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
-                      <th className="text-center text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight/Unit (kg)</th>
                       <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
                       <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Rate (₨)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-32">Amount (₨)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -585,7 +583,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                               value={row.item_code}
                               onChange={(val) => {
                                 handleDetailChange(index, 'item_code', val);
-                                // Auto-fill weight_per_unit from item's WEIGHT_KG
                                 const weight = getItemWeight(val);
                                 handleDetailChange(index, 'weight_per_unit', weight);
                               }}
@@ -689,6 +686,12 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                               placeholder="0"
                             />
                           </td>
+                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                            {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                          </td>
+                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                            {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                          </td>
                           <td className="border-r border-b border-gray-300">
                             <input
                               type="number"
@@ -702,26 +705,6 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                               placeholder="0.0000"
                             />
                           </td>
-                          {/* Weight fields */}
-                          <td className="border-r border-b border-gray-300 p-0">
-                            <input
-                              type="number"
-                              step="0.001"
-                              value={row.weight_per_unit || ''}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                handleDetailChange(index, 'weight_per_unit', val);
-                              }}
-                              className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-500"
-                              placeholder="0.000"
-                            />
-                          </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                            {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
-                          </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                            {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
-                          </td>
                           <td className="border-r border-b border-gray-300 text-right font-bold text-red-600 px-3 py-1.5">
                             {rowAmount.toFixed(2)}
                           </td>
@@ -731,7 +714,7 @@ const AddPurchaseOrderModal = ({ open, onOpenChange, editingPO, onSave }) => {
                   </tbody>
                   <tfoot className="bg-gray-200">
                     <tr className="border-t border-gray-300">
-                      <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
+                      <td colSpan="8" className="px-3 py-2 text-right font-semibold text-gray-900">
                         Total Amount:
                       </td>
                       <td className="px-3 py-2 text-right font-bold text-red-600 text-base">

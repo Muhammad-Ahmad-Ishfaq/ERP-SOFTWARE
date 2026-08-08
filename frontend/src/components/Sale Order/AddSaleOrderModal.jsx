@@ -19,7 +19,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // ── Animation state ──
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -34,7 +33,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   }, [open]);
 
-  // ── Form state ──
   const [master, setMaster] = useState({
     vtype: 'SO',
     vno: null,
@@ -45,7 +43,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     user_no: '',
   });
 
-  // ── Dynamic detail rows with weight fields ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -64,17 +61,14 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
 
   const isRowFilled = (row) => row.item_code && row.uom && row.qty > 0 && row.rate > 0;
 
-  // ── Dropdown data ──
   const [customers, setCustomers] = useState([]);
   const [items, setItems] = useState([]);
   const [units, setUnits] = useState([]);
 
-  // ── Combobox queries ──
   const [customerQuery, setCustomerQuery] = useState('');
   const [itemQueries, setItemQueries] = useState({});
   const [uomQueries, setUomQueries] = useState({});
 
-  // ── Get logged-in user ID ──
   const getCurrentUserId = () => {
     try {
       const userData = localStorage.getItem('user');
@@ -88,7 +82,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     return 1;
   };
 
-  // ── Fetch next voucher number ──
   const fetchNextVoucherNo = async () => {
     try {
       const res = await api.get('/sale-orders/sale-orders/next-voucher/');
@@ -109,7 +102,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   };
 
-  // ── Fetch dropdowns ──
   const fetchDropdowns = async () => {
     try {
       const [customersRes, itemsRes, unitsRes] = await Promise.all([
@@ -134,7 +126,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   }, [open]);
 
-  // ── Load edit data ──
   useEffect(() => {
     if (editingSaleOrder && open) {
       setMaster({
@@ -167,8 +158,8 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
       const queries = {};
       const uomQueriesObj = {};
       existingDetails.forEach((d, idx) => {
-        if (d.item_code) queries[idx] = d.item_code;
-        if (d.uom) uomQueriesObj[idx] = d.uom;
+        if (d.item_code) queries[idx] = String(d.item_code);
+        if (d.uom) uomQueriesObj[idx] = String(d.uom);
       });
       setItemQueries(queries);
       setUomQueries(uomQueriesObj);
@@ -179,7 +170,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   }, [editingSaleOrder, open, nextVoucherNo]);
 
-  // ── Recalculate weight and amount ──
   const recalcRow = (row) => {
     const qty = parseFloat(row.qty) || 0;
     const weightPerUnit = parseFloat(row.weight_per_unit) || 0;
@@ -192,7 +182,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     return { ...row, weight_kg: weightKg, weight_lbs: weightLbs, amount };
   };
 
-  // ── Handlers ──
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
   };
@@ -201,7 +190,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
-    // Recalculate weight and amount if relevant field changes
     if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
       updated = recalcRow(updated);
     }
@@ -216,12 +204,10 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   };
 
-  // ── Calculate total ──
   const calculateTotal = () => {
     return details.reduce((sum, d) => sum + (d.amount || 0), 0);
   };
 
-  // ── Get display values ──
   const getCustomerDisplay = (id) => {
     const customer = customers.find(c => c.id === parseInt(id));
     return customer ? customer.name : '';
@@ -242,38 +228,38 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     return item ? item.ITEM_NAME : '';
   };
 
-  // ── Get item weight from items list ──
   const getItemWeight = (id) => {
     const item = items.find(i => i.ITEM_ID === parseInt(id));
     return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
   };
 
-  // ── Filter functions ──
   const getFilteredCustomers = (query) => {
     if (!query) return customers;
+    const q = query.toLowerCase();
     return customers.filter(c =>
-      c.name?.toLowerCase().includes(query.toLowerCase()) ||
-      c.code?.toString().includes(query)
+      c.name?.toLowerCase().includes(q) ||
+      c.code?.toString().includes(q)
     );
   };
 
   const getFilteredItems = (query) => {
     if (!query) return items;
+    const q = query.toLowerCase();
     return items.filter(i =>
-      i.ITEM_CODE?.toLowerCase().includes(query.toLowerCase()) ||
-      i.ITEM_NAME?.toLowerCase().includes(query.toLowerCase())
+      i.ITEM_CODE?.toLowerCase().includes(q) ||
+      i.ITEM_NAME?.toLowerCase().includes(q)
     );
   };
 
   const getFilteredUnits = (query) => {
     if (!query) return units;
+    const q = query.toLowerCase();
     return units.filter(u =>
-      u.UOM_NAME?.toLowerCase().includes(query.toLowerCase()) ||
-      u.SHORT_NAME?.toLowerCase().includes(query.toLowerCase())
+      u.UOM_NAME?.toLowerCase().includes(q) ||
+      u.SHORT_NAME?.toLowerCase().includes(q)
     );
   };
 
-  // ── Status helpers ──
   const getStatusColor = (status) => {
     const option = statusOptions.find(s => s.value === status);
     return option ? option.color : 'text-gray-400';
@@ -284,7 +270,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     return option ? option.label : status;
   };
 
-  // ── Submit ──
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!master.vdate) {
@@ -348,7 +333,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   };
 
-  // ── Close dropdown on outside click ──
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -480,7 +464,7 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
 
             {/* Row 2: Customer */}
             <div className="grid grid-cols-5 gap-4 mb-3">
-              <div className="">
+              <div className="col-span-5">
                 <label className="block text-sm font-medium text-gray-900 mb-1">
                   Customer <span className="text-red-400">*</span>
                 </label>
@@ -537,7 +521,7 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
               </div>
             </div>
 
-            {/* Items Table */}
+            {/* Items Table – updated columns */}
             <div className="overflow-hidden">
               <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
                 <h3 className="text-md font-semibold text-gray-900">Items</h3>
@@ -554,11 +538,10 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                       <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
                       <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-24">UOM</th>
                       <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
-                      <th className="text-center text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight/Unit (kg)</th>
                       <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
                       <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Rate (₨)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-32">Amount (₨)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -580,7 +563,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                               value={row.item_code}
                               onChange={(val) => {
                                 handleDetailChange(index, 'item_code', val);
-                                // Auto-fill weight_per_unit from item's WEIGHT_KG
                                 const weight = getItemWeight(val);
                                 handleDetailChange(index, 'weight_per_unit', weight);
                               }}
@@ -684,6 +666,12 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                               placeholder="0"
                             />
                           </td>
+                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                            {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                          </td>
+                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                            {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                          </td>
                           <td className="border-r border-b border-gray-300">
                             <input
                               type="number"
@@ -697,26 +685,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                               placeholder="0.0000"
                             />
                           </td>
-                          {/* Weight fields */}
-                          <td className="border-r border-b border-gray-300 p-0">
-                            <input
-                              type="number"
-                              step="0.001"
-                              value={row.weight_per_unit || ''}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                handleDetailChange(index, 'weight_per_unit', val);
-                              }}
-                              className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-500"
-                              placeholder="0.000"
-                            />
-                          </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                            {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
-                          </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                            {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
-                          </td>
                           <td className="border-r border-b border-gray-300 text-right font-bold text-red-600 px-3 py-1.5">
                             {rowAmount.toFixed(2)}
                           </td>
@@ -726,7 +694,7 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                   </tbody>
                   <tfoot className="bg-gray-200">
                     <tr className="border-t border-gray-300">
-                      <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
+                      <td colSpan="8" className="px-3 py-2 text-right font-semibold text-gray-900">
                         Total Amount:
                       </td>
                       <td className="px-3 py-2 text-right font-bold text-red-600 text-base">

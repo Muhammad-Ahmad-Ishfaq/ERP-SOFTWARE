@@ -1,6 +1,6 @@
 // src/components/Sales/AddSaleBillModal.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, ChevronDown, ChevronDownIcon, FileText, Search, CheckCircle, Circle } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronDownIcon, FileText, CheckCircle, Circle } from 'lucide-react';
 import { Combobox } from '@headlessui/react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
@@ -49,14 +49,14 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     vno: null,
     vdate: new Date().toISOString().split('T')[0],
     dc_no: '',
-    account_code: '', // customer (debtor)
+    account_code: '',
     remarks: '',
     discount: 0,
     stts: 'P',
     user_no: '',
   });
 
-  // ── Dynamic detail rows with weight fields ──
+  // ── Dynamic detail rows ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -205,9 +205,9 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       const uomQueriesObj = {};
       const locQueries = {};
       existingDetails.forEach((d, idx) => {
-        if (d.item_code) queries[idx] = d.item_code;
-        if (d.uom) uomQueriesObj[idx] = d.uom;
-        if (d.location) locQueries[idx] = d.location;
+        if (d.item_code) queries[idx] = String(d.item_code);
+        if (d.uom) uomQueriesObj[idx] = String(d.uom);
+        if (d.location) locQueries[idx] = String(d.location);
       });
       setItemQueries(queries);
       setUomQueries(uomQueriesObj);
@@ -227,7 +227,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       ...prev,
       account_code: so.customer || '',
       remarks: so.remarks || '',
-      stts: 'P', // bill starts as pending, user can change
+      stts: 'P',
       vdate: new Date().toISOString().split('T')[0],
       user_no: getCurrentUserId(),
     }));
@@ -254,9 +254,9 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     const uomQueriesObj = {};
     const locQueries = {};
     soDetails.forEach((d, idx) => {
-      if (d.item_code) queries[idx] = d.item_code;
-      if (d.uom) uomQueriesObj[idx] = d.uom;
-      if (d.location) locQueries[idx] = d.location;
+      if (d.item_code) queries[idx] = String(d.item_code);
+      if (d.uom) uomQueriesObj[idx] = String(d.uom);
+      if (d.location) locQueries[idx] = String(d.location);
     });
     setItemQueries(queries);
     setUomQueries(uomQueriesObj);
@@ -303,12 +303,10 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     }
   };
 
-  // ── Calculate total ──
   const calculateTotal = () => {
     return details.reduce((sum, d) => sum + (d.amount || 0), 0);
   };
 
-  // ── Get display values ──
   const getCustomerDisplay = (id) => {
     const customer = customers.find(c => c.id === parseInt(id));
     return customer ? customer.name : '';
@@ -334,13 +332,11 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return item ? item.ITEM_NAME : '';
   };
 
-  // ── Get item weight from items list ──
   const getItemWeight = (id) => {
     const item = items.find(i => i.ITEM_ID === parseInt(id));
     return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
   };
 
-  // ── Filter functions ──
   const getFilteredCustomers = (query) => {
     if (!query) return customers;
     return customers.filter(c =>
@@ -373,7 +369,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     );
   };
 
-  // ── Status helpers ──
   const getStatusColor = (status) => {
     const option = statusOptions.find(s => s.value === status);
     return option ? option.color : 'text-gray-400';
@@ -384,7 +379,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return option ? option.label : status;
   };
 
-  // ── Submit ──
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!master.vdate) {
@@ -427,7 +421,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
           weight_lbs: parseFloat(d.weight_lbs) || 0,
         })),
       };
-      // If we loaded from a sale order, send its ID so backend can update status
       if (selectedSOId) {
         payload.sale_order_id = selectedSOId;
       }
@@ -455,7 +448,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     }
   };
 
-  // ── Close dropdown on outside click ──
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -466,7 +458,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ── Filtered SOs and pagination ──
   const filteredSOs = pendingSOs.filter(so => {
     const term = soSearchTerm.toLowerCase();
     return (
@@ -495,34 +486,8 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   return (
     <>
       {/* ─── MAIN MODAL ─── */}
-      <div
-        className={`
-          fixed inset-0 z-50
-          flex items-start justify-center
-          overflow-hidden
-          bg-black/50
-          backdrop-blur-sm
-          transition-opacity
-          duration-300
-          ease-out
-          ${isVisible ? "opacity-100" : "opacity-0"}
-        `}
-      >
-        <div
-          className={`
-            w-full
-            h-full
-            max-h-screen
-            bg-white
-            shadow-2xl
-            flex flex-col
-            transform
-            transition-transform
-            duration-500
-            ease-out
-            ${isVisible ? "translate-y-0" : "-translate-y-full"}
-          `}
-        >
+      <div className={`fixed inset-0 z-50 flex items-start justify-center overflow-hidden bg-black/50 backdrop-blur-sm transition-opacity duration-300 ease-out ${isVisible ? "opacity-100" : "opacity-0"}`}>
+        <div className={`w-full h-full max-h-screen bg-white shadow-2xl flex flex-col transform transition-transform duration-500 ease-out ${isVisible ? "translate-y-0" : "-translate-y-full"}`}>
           {/* Header */}
           <div className="flex-shrink-0 sticky top-0 bg-gray-200 px-4 py-1.5 flex justify-between items-center z-10">
             <div>
@@ -706,7 +671,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                 </div>
               </div>
 
-              {/* Items Table */}
+              {/* Items Table – updated columns */}
               <div className="overflow-hidden">
                 <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
                   <h3 className="text-md font-semibold text-gray-900">Items</h3>
@@ -724,10 +689,9 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">UOM</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
-                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
-                        <th className="text-center text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight/Unit (kg)</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Rate (₨)</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
                       </tr>
                     </thead>
@@ -895,6 +859,12 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                                 placeholder="0"
                               />
                             </td>
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                              {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                              {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                            </td>
                             <td className="border-r border-b border-gray-300">
                               <input
                                 type="number"
@@ -908,25 +878,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                                 placeholder="0.0000"
                               />
                             </td>
-                            <td className="border-r border-b border-gray-300 p-0">
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={row.weight_per_unit || ''}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  handleDetailChange(index, 'weight_per_unit', val);
-                                }}
-                                className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-500"
-                                placeholder="0.000"
-                              />
-                            </td>
-                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                              {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
-                            </td>
-                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                              {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
-                            </td>
                             <td className="border-r border-b border-gray-300 text-right font-bold text-red-600 px-3 py-1.5">
                               {formatAmount(rowAmount)}
                             </td>
@@ -936,7 +887,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                     </tbody>
                     <tfoot className="bg-gray-200">
                       <tr className="border-t border-gray-300">
-                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">
+                        <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
                           Total Amount:
                         </td>
                         <td className="px-3 py-2 text-right font-bold text-red-600 text-base">
@@ -944,7 +895,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         </td>
                       </tr>
                       <tr className="border-t border-gray-300">
-                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">
+                        <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
                           Discount ({master.discount || 0}%):
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-red-500 text-base">
@@ -952,7 +903,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         </td>
                       </tr>
                       <tr className="border-t-2 border-gray-300">
-                        <td colSpan="10" className="px-3 py-3 text-right font-bold text-gray-900">
+                        <td colSpan="9" className="px-3 py-3 text-right font-bold text-gray-900">
                           Grand Total:
                         </td>
                         <td className="px-3 py-3 text-right font-bold text-green-600 text-base">
