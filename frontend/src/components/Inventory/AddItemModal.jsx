@@ -17,6 +17,8 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
     REORDER_LEVEL: 0,
     MORE_DETAIL: '',
     STATUS: true,
+    WEIGHT_KG: 0,
+    WEIGHT_LBS: 0,
   });
 
   const [loading, setLoading] = useState(false);
@@ -43,6 +45,8 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
         REORDER_LEVEL: editingItem.REORDER_LEVEL || 0,
         MORE_DETAIL: editingItem.MORE_DETAIL || '',
         STATUS: editingItem.STATUS !== undefined ? editingItem.STATUS : true,
+        WEIGHT_KG: editingItem.WEIGHT_KG || 0,
+        WEIGHT_LBS: editingItem.WEIGHT_LBS || 0,
       });
     } else {
       setFormData({
@@ -55,6 +59,8 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
         REORDER_LEVEL: 0,
         MORE_DETAIL: '',
         STATUS: true,
+        WEIGHT_KG: 0,
+        WEIGHT_LBS: 0,
       });
     }
   }, [editingItem, isOpen]);
@@ -86,10 +92,15 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
   }, []);
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      // Auto‑calculate lbs if kg changes
+      if (field === 'WEIGHT_KG') {
+        const kg = parseFloat(value) || 0;
+        updated.WEIGHT_LBS = kg * 2.2040;
+      }
+      return updated;
+    });
   };
 
   const handleSubmit = async () => {
@@ -114,6 +125,8 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
         REORDER_LEVEL: parseFloat(formData.REORDER_LEVEL) || 0,
         MORE_DETAIL: formData.MORE_DETAIL || '',
         STATUS: formData.STATUS,
+        WEIGHT_KG: parseFloat(formData.WEIGHT_KG) || 0,
+        WEIGHT_LBS: parseFloat(formData.WEIGHT_LBS) || 0,
       };
 
       console.log('📤 Saving item with payload:', payload);
@@ -149,14 +162,12 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
     return units?.find(u => u.UOM_ID === parseInt(formData.UOM));
   };
 
-  // Get unit name for preview
   const getUnitName = () => {
     if (!formData.UOM) return 'Not selected';
     const unit = getSelectedUnit();
     return unit ? `${unit.UOM_NAME} (${unit.SHORT_NAME})` : 'Not selected';
   };
 
-  // Get selected unit display name for the trigger
   const getSelectedUnitDisplay = () => {
     if (!formData.UOM) return 'Select unit of measurement';
     const unit = getSelectedUnit();
@@ -191,7 +202,7 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
     }
   };
 
-  // Professional UOM Selector Component (without search)
+  // UOM Selector
   const UomSelector = () => (
     <div className="relative" ref={uomDropdownRef}>
       <div
@@ -221,10 +232,8 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
         `} />
       </div>
 
-      {/* Dropdown - without search */}
       {isUomOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xs shadow-lg overflow-hidden">
-          {/* Options List */}
           <div className="max-h-48 overflow-y-auto">
             {Array.isArray(units) && units.length > 0 ? (
               units.map((unit, index) => {
@@ -268,7 +277,6 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
             )}
           </div>
 
-          {/* Footer */}
           <div className="px-3 py-2 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex justify-between">
             <span>{units?.length || 0} unit{units?.length !== 1 ? 's' : ''} available</span>
             <span className="flex items-center gap-1">
@@ -284,7 +292,7 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
     </div>
   );
 
-  // Status Selector Component
+  // Status Selector
   const StatusSelector = () => {
     const statusOptions = [
       { value: true, label: 'Active' },
@@ -344,18 +352,15 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
     );
   };
 
-  // If not open, don't render anything
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
         onClick={onClose}
       />
       
-      {/* Side Sheet */}
       <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl overflow-y-auto rounded-l-xs animate-in slide-in-from-right duration-300">
         <div className="flex flex-col h-full">
           {/* Header */}
@@ -384,17 +389,13 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                 id="ITEM_NAME"
                 value={formData.ITEM_NAME}
                 onChange={(e) => handleChange('ITEM_NAME', e.target.value)}
-                className={`
-                  h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                  border-gray-200 bg-white
-                  outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                  hover:border-gray-300
-                `}
+                className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                 placeholder="Enter item name..."
+                tabIndex={1}
               />
             </div>
 
-            {/* UOM - Professional Selector */}
+            {/* UOM */}
             <div>
               <Label htmlFor="UOM" className="text-xs font-medium text-gray-600 block mb-1">
                 Unit of Measurement <span className="text-red-500">*</span>
@@ -402,11 +403,45 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
               <UomSelector />
             </div>
 
-            {/* Pricing & Stock Section - 2 Column Layout */}
+            {/* Weight Section */}
+            <div className="pt-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Weight</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="WEIGHT_KG" className="text-xs font-medium text-gray-600 block mb-1">
+                    Weight (kg)
+                  </Label>
+                  <input
+                    id="WEIGHT_KG"
+                    type="number"
+                    step="0.001"
+                    value={formData.WEIGHT_KG}
+                    onChange={(e) => handleChange('WEIGHT_KG', parseFloat(e.target.value) || 0)}
+                    className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
+                    placeholder="0.000"
+                    tabIndex={3}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="WEIGHT_LBS" className="text-xs font-medium text-gray-600 block mb-1">
+                    Weight (lbs)
+                  </Label>
+                  <input
+                    id="WEIGHT_LBS"
+                    type="text"
+                    value={formData.WEIGHT_LBS ? formData.WEIGHT_LBS.toFixed(3) : '0.000'}
+                    readOnly
+                    className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-gray-50 cursor-not-allowed text-gray-500"
+                    tabIndex={-1}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">Auto‑calculated (kg × 2.2040)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing & Stock Section */}
             <div className="pt-2">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Pricing & Stock</p>
-              
-              {/* Row 1: Cost Price & Min Stock */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <Label htmlFor="COST_PRICE" className="text-xs font-medium text-gray-600 block mb-1">
@@ -420,13 +455,9 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                       step="0.01"
                       value={formData.COST_PRICE}
                       onChange={(e) => handleChange('COST_PRICE', parseFloat(e.target.value) || 0)}
-                      className={`
-                        pl-6 h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                        border-gray-200 bg-white
-                        outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                        hover:border-gray-300
-                      `}
+                      className="pl-6 h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                       placeholder="0.00"
+                      tabIndex={4}
                     />
                   </div>
                 </div>
@@ -440,18 +471,13 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                     step="0.01"
                     value={formData.MIN_STOCK}
                     onChange={(e) => handleChange('MIN_STOCK', parseFloat(e.target.value) || 0)}
-                    className={`
-                      h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                      border-gray-200 bg-white
-                      outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                      hover:border-gray-300
-                    `}
+                    className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                     placeholder="0"
+                    tabIndex={5}
                   />
                 </div>
               </div>
 
-              {/* Row 2: Max Stock & Reorder Level */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="MAX_STOCK" className="text-xs font-medium text-gray-600 block mb-1">
@@ -463,13 +489,9 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                     step="0.01"
                     value={formData.MAX_STOCK}
                     onChange={(e) => handleChange('MAX_STOCK', parseFloat(e.target.value) || 0)}
-                    className={`
-                      h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                      border-gray-200 bg-white
-                      outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                      hover:border-gray-300
-                    `}
+                    className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                     placeholder="0"
+                    tabIndex={6}
                   />
                 </div>
                 <div>
@@ -482,13 +504,9 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                     step="0.01"
                     value={formData.REORDER_LEVEL}
                     onChange={(e) => handleChange('REORDER_LEVEL', parseFloat(e.target.value) || 0)}
-                    className={`
-                      h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                      border-gray-200 bg-white
-                      outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                      hover:border-gray-300
-                    `}
+                    className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                     placeholder="0"
+                    tabIndex={7}
                   />
                 </div>
               </div>
@@ -503,13 +521,9 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                 id="ITEM_DESCRIPTION"
                 value={formData.ITEM_DESCRIPTION}
                 onChange={(e) => handleChange('ITEM_DESCRIPTION', e.target.value)}
-                className={`
-                  h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                  border-gray-200 bg-white
-                  outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                  hover:border-gray-300
-                `}
+                className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                 placeholder="Enter description..."
+                tabIndex={8}
               />
             </div>
 
@@ -522,17 +536,13 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                 id="MORE_DETAIL"
                 value={formData.MORE_DETAIL}
                 onChange={(e) => handleChange('MORE_DETAIL', e.target.value)}
-                className={`
-                  h-9 w-full text-sm rounded-xs px-2 border transition-all duration-200
-                  border-gray-200 bg-white
-                  outline-none focus:outline-none focus:ring-2 focus:ring-green-600
-                  hover:border-gray-300
-                `}
+                className="h-9 w-full text-sm rounded-xs px-2 border border-gray-200 bg-white outline-none focus:ring-2 focus:ring-green-600 hover:border-gray-300 transition-all duration-200"
                 placeholder="Additional details..."
+                tabIndex={9}
               />
             </div>
 
-            {/* Status - Professional Selector */}
+            {/* Status */}
             <div>
               <Label htmlFor="STATUS" className="text-xs font-medium text-gray-600 block mb-1">
                 Status
@@ -540,10 +550,11 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
               <StatusSelector />
             </div>
 
-            {/* Toggle Preview Button */}
+            {/* Toggle Preview */}
             <button
               onClick={() => setShowPreview(!showPreview)}
               className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors pt-2"
+              type="button"
             >
               {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               {showPreview ? 'Hide Preview' : 'Show Preview'}
@@ -576,6 +587,14 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                     <span className="font-medium text-gray-700">{getUnitName()}</span>
                   </div>
                   <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Weight (kg)</span>
+                    <span className="font-medium text-gray-700">{Number(formData.WEIGHT_KG).toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Weight (lbs)</span>
+                    <span className="font-medium text-gray-700">{Number(formData.WEIGHT_LBS).toFixed(3)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Cost Price</span>
                     <span className="font-medium text-gray-700">${Number(formData.COST_PRICE).toFixed(2)}</span>
                   </div>
@@ -599,7 +618,6 @@ const AddItemModal = ({ isOpen, onClose, onSave, units, editingItem }) => {
                   )}
                 </div>
 
-                {/* Preview Tips */}
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <p className="text-xs text-blue-600">
                     <span className="font-semibold">Tip:</span> All fields are being previewed in real-time as you type.

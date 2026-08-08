@@ -25,7 +25,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
-import { Plus, Pencil, Trash2, Search, Package, Ruler, X, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, Ruler, X, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 import AddItemModal from '@/components/Inventory/AddItemModal';
@@ -33,7 +33,6 @@ import AddItemModal from '@/components/Inventory/AddItemModal';
 // ========== CUSTOM ALERT DIALOG COMPONENTS ==========
 const AlertDialog = ({ open, onOpenChange, children }) => {
   if (!open) return null;
-  
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div 
@@ -206,15 +205,12 @@ const Items = () => {
     setIsDeleting(true);
     try {
       await api.delete(`/inventory/items/${itemToDelete.ITEM_ID}/`);
-      // ✅ Success – item is physically deleted (no soft delete)
       setItems((prevItems) => prevItems.filter((i) => i.ITEM_ID !== itemToDelete.ITEM_ID));
       toast.success(`"${itemToDelete.ITEM_NAME}" deleted successfully`);
       setDeleteDialogOpen(false);
       setItemToDelete(null);
     } catch (error) {
       console.error('❌ Error deleting item:', error);
-      
-      // ✅ Show detailed error from backend
       let errorMsg = 'Failed to delete item.';
       if (error.response?.status === 400) {
         errorMsg = error.response.data?.error || 
@@ -225,7 +221,6 @@ const Items = () => {
         errorMsg = 'Item not found.';
       }
       toast.error(errorMsg);
-      // ✅ Item stays in the list – no removal
     } finally {
       setIsDeleting(false);
       setDeleteDialogOpen(false);
@@ -465,6 +460,8 @@ const Items = () => {
                         <TableHead className="text-center text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 w-20">Code</TableHead>
                         <TableHead className="text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 px-4">Name</TableHead>
                         <TableHead className="text-center text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 w-20">UOM</TableHead>
+                        <TableHead className="text-center text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 w-28">Weight (kg)</TableHead>
+                        <TableHead className="text-center text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 w-28">Weight (lbs)</TableHead>
                         <TableHead className="text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 w-32 text-right">Cost Price</TableHead>
                         <TableHead className="text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 w-40 text-right">Re-Order Level</TableHead>
                         <TableHead className="text-xs font-medium text-gray-500 border-r border-gray-200 uppercase tracking-wider py-3 px-4 w-32 text-center">Status</TableHead>
@@ -474,7 +471,7 @@ const Items = () => {
                     <TableBody>
                       {filteredItems.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan="6" className="text-center py-16 text-gray-400">
+                          <TableCell colSpan="9" className="text-center py-16 text-gray-400">
                             <div className="flex flex-col items-center gap-2">
                               <Package className="h-12 w-12 text-gray-300" />
                               <p className="text-sm font-medium">No items found</p>
@@ -489,16 +486,29 @@ const Items = () => {
                               <span className="px-2 py-1 rounded-xs">{item.ITEM_CODE}</span>
                             </TableCell>
                             <TableCell className="font-medium py-3 px-4 border-r border-b border-gray-200">{item.ITEM_NAME}</TableCell>
-                            <TableCell className="py-3 px-4 text-center border-r border-b border-gray-200">{item.UOM?.UOM_NAME || item.unit_short_name || '-'}</TableCell>
-                            <TableCell className="text-right font-medium py-3 px-4 border-r border-b border-gray-200">{Number(item.COST_PRICE).toFixed(2)}</TableCell>
-                            <TableCell className="text-right font-medium py-3 px-4 border-r border-b border-gray-200">{item.REORDER_LEVEL}</TableCell>
+                            <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
+                              {item.UOM?.UOM_NAME || item.unit_short_name || '-'}
+                            </TableCell>
+                            {/* ─── Weight columns ─── */}
+                            <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
+                              {Number(item.WEIGHT_KG || 0).toFixed(3)}
+                            </TableCell>
+                            <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
+                              {Number(item.WEIGHT_LBS || 0).toFixed(3)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium py-3 px-4 border-r border-b border-gray-200">
+                              {Number(item.COST_PRICE).toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium py-3 px-4 border-r border-b border-gray-200">
+                              {item.REORDER_LEVEL}
+                            </TableCell>
                             <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
                               <span className={`px-3 py-1 rounded-xs text-xs font-medium ${item.STATUS ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                 {item.STATUS ? 'Active' : 'Inactive'}
                               </span>
                             </TableCell>
                             <TableCell className="text-center py-3 px-4 border-b border-gray-200">
-                              <div className="flex items-center">
+                              <div className="flex items-center justify-center gap-0.5">
                                 <Button variant="ghost" size="sm" onClick={() => handleEditClick(item)} className="h-8 w-8 p-0 hover:bg-green-100 hover:text-green-600 rounded-xs text-green-600">
                                   <Pencil className="h-4 w-4" />
                                 </Button>
@@ -603,15 +613,13 @@ const Items = () => {
       <Sheet open={isUnitModalOpen} onOpenChange={setIsUnitModalOpen}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto p-0 bg-white">
           <div className="flex flex-col h-full bg-white">
-            <div>
             <div className="border-b border-gray-200 px-4 py-3 bg-white sticky top-0 z-10">
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-base font-semibold text-gray-900 tracking-tight">
                     {editingUnit ? 'Edit Unit' : 'New Unit'}
                   </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5"></p>
                 </div>
                 <button
                   onClick={() => {
@@ -623,7 +631,6 @@ const Items = () => {
                 >
                   <X className="w-4 h-4 text-gray-500 hover:text-gray-700" />
                 </button>
-              </div>
               </div>
             </div>
 
@@ -701,7 +708,6 @@ const Items = () => {
                         {unitForm.status ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-
                     <div>
                       <p className="text-sm font-semibold text-gray-900">
                         {unitForm.name || 'Unit Name'}
@@ -712,7 +718,6 @@ const Items = () => {
                         </p>
                       )}
                     </div>
-
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs text-blue-600">
                         <span className="font-semibold">Tip:</span> All fields are being previewed in real-time as you type.
