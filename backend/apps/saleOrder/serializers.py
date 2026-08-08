@@ -1,5 +1,5 @@
 # apps/saleOrder/serializers.py
-from rest_framework import serializers
+from rest_framework import serializers          # ✅ this was missing
 from django.db import transaction
 from decimal import Decimal
 from .models import SaleOrderMaster, SaleOrderDetail
@@ -92,7 +92,6 @@ class SaleOrderMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = Decimal(str(qty)) * Decimal(str(rate))
 
-            # weight_kg validation (optional)
             weight_kg = detail.get('weight_kg')
             if weight_kg is not None and Decimal(str(weight_kg)) < 0:
                 raise serializers.ValidationError({

@@ -1,6 +1,6 @@
 # apps/saleOrder/models.py
 from django.db import models
-from decimal import Decimal
+from decimal import Decimal  # ✅ must import
 from apps.users.models import User
 from apps.accounting.models import Party
 from apps.inventory.models import Item, Unit
@@ -65,7 +65,6 @@ class SaleOrderDetail(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, db_column='AMOUNT', default=0)
 
     # ─── Weight fields ────────────────────────────────────────────────────
-    # weight_kg is user‑entered; weight_lbs is auto‑computed
     weight_kg = models.DecimalField(
         max_digits=15, decimal_places=3,
         default=0,
@@ -93,7 +92,6 @@ class SaleOrderDetail(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        # Auto‑compute weight_lbs from weight_kg
         if self.weight_kg:
             self.weight_lbs = self.weight_kg * Decimal('2.2046')
         else:
