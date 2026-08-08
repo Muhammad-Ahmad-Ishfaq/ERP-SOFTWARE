@@ -67,7 +67,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     location: null,
     weight_kg: 0,
     weight_lbs: 0,
-    available_stock: 0, // ← new
+    available_stock: 0,
   });
 
   const [details, setDetails] = useState(
@@ -81,7 +81,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   const [items, setItems] = useState([]);
   const [units, setUnits] = useState([]);
   const [locations, setLocations] = useState([]);
-  const [inventoryData, setInventoryData] = useState([]); // ← new
+  const [inventoryData, setInventoryData] = useState([]);
 
   // ── Combobox queries ──
   const [customerQuery, setCustomerQuery] = useState('');
@@ -102,7 +102,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return 1;
   };
 
-  // ── Fetch inventory data ──
+  // ─── Fetch inventory data (stock per item + location) ───
   const fetchInventory = async () => {
     try {
       const [purchasesRes, salesRes, itemsRes] = await Promise.all([
@@ -223,7 +223,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       setMaster(prev => ({ ...prev, user_no: userId }));
       fetchDropdowns();
       fetchNextVoucherNo();
-      fetchInventory(); // ← fetch inventory
+      fetchInventory();
       if (isDrawerOpen) {
         fetchPendingSOs();
       }
@@ -356,21 +356,19 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
-    // If item_code changes, auto-fill UOM, weight, and available stock
+    // ── When item is selected, fill UOM, Weight (kg), and available stock ──
     if (field === 'item_code') {
       const selectedItem = items.find(i => i.ITEM_ID === parseInt(value));
       if (selectedItem) {
         updated.uom = selectedItem.UOM?.UOM_ID || '';
         updated.weight_kg = parseFloat(selectedItem.WEIGHT_KG) || 0;
-        // Recalc weight & amount
-        updated = recalcRow(updated);
-        // Update available stock based on current location
+        updated = recalcRow(updated); // auto‑compute weight_lbs & amount
         const loc = updated.location;
         updated.available_stock = getAvailableStock(value, loc);
       }
     }
 
-    // If location changes, update available stock
+    // ── When location changes, update available stock ──
     if (field === 'location') {
       const loc = value;
       const itemId = updated.item_code;
@@ -379,7 +377,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       }
     }
 
-    // Recalculate weight and amount if weight_kg or rate changes
+    // ── When weight_kg or rate changes, recalc lbs and amount ──
     if (field === 'weight_kg' || field === 'rate') {
       updated = recalcRow(updated);
     }
@@ -777,7 +775,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">UOM</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th>
-                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Avail. Stock</th> {/* NEW */}
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Avail. Stock</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
