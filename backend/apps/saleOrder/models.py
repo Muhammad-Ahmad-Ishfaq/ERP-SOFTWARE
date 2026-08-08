@@ -65,20 +65,16 @@ class SaleOrderDetail(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, db_column='AMOUNT', default=0)
 
     # ─── Weight fields ────────────────────────────────────────────────────
-    weight_per_unit = models.DecimalField(
-        max_digits=10, decimal_places=3,
-        default=0,
-        help_text="Weight per unit (kg) – taken from item at order time"
-    )
+    # weight_kg is user‑entered; weight_lbs is auto‑computed
     weight_kg = models.DecimalField(
         max_digits=15, decimal_places=3,
         default=0,
-        help_text="Total weight in kg (qty × weight_per_unit)"
+        help_text="Total weight in kg (user entered)"
     )
     weight_lbs = models.DecimalField(
         max_digits=15, decimal_places=3,
         default=0,
-        help_text="Total weight in lbs (weight_kg × 2.2040)"
+        help_text="Total weight in lbs (auto‑computed from weight_kg)"
     )
 
     sale_order_master = models.ForeignKey(
@@ -97,12 +93,10 @@ class SaleOrderDetail(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        # Auto‑calculate weight_kg and weight_lbs if qty and weight_per_unit are set
-        if self.qty and self.weight_per_unit:
-            self.weight_kg = self.qty * self.weight_per_unit
-            self.weight_lbs = self.weight_kg * Decimal('2.2040')
+        # Auto‑compute weight_lbs from weight_kg
+        if self.weight_kg:
+            self.weight_lbs = self.weight_kg * Decimal('2.2046')
         else:
-            self.weight_kg = 0
             self.weight_lbs = 0
         super().save(*args, **kwargs)
 

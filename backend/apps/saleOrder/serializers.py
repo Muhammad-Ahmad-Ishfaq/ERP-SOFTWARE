@@ -11,7 +11,7 @@ class SaleOrderDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
 
-    # ─── Weight fields ────────────────────────────────────────────────────
+    # weight_kg writable, weight_lbs read‑only
     weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, required=False)
     weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
 
