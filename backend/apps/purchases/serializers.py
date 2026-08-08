@@ -1,4 +1,3 @@
-# apps/purchases/serializers.py
 from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Sum
@@ -8,22 +7,20 @@ from apps.accounting.models import VoucherMaster, VoucherDetail, Party
 from apps.ac_setup.models import ACSetup
 from apps.locations.models import Location
 
-
 class PurchaseDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
     location_display = serializers.CharField(source='location.name', read_only=True)
+
+    # ─── Weight fields ────────────────────────────────────────────────────
+    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, required=False)
+    weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
 
     location = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
         allow_null=True
     )
-
-    # Weight fields – weight_kg and weight_lbs are read‑only
-    weight_per_unit = serializers.DecimalField(max_digits=10, decimal_places=3, required=False)
-    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
-    weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
 
     class Meta:
         model = PurchaseDetail
@@ -32,10 +29,11 @@ class PurchaseDetailSerializer(serializers.ModelSerializer):
             'uom', 'uom_display',
             'qty', 'rate', 'amount',
             'location', 'location_display',
-            'weight_per_unit', 'weight_kg', 'weight_lbs'
+            'weight_kg', 'weight_lbs'
         )
         extra_kwargs = {
             'location': {'required': False, 'allow_null': True},
+            'weight_kg': {'required': False},
         }
 
 
@@ -75,7 +73,6 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
     def validate(self, data):
         print("📥 Incoming data for purchase creation:", data)
 
-        # 1. Required fields
         if not data.get('vtype'):
             raise serializers.ValidationError({"vtype": "Voucher type is required."})
         if not data.get('vno'):
@@ -83,7 +80,6 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
         if not data.get('vdate'):
             raise serializers.ValidationError({"vdate": "Date is required."})
 
-        # 2. Validate supplier
         supplier = data.get('account_code')
         if not supplier:
             raise serializers.ValidationError({"account_code": "Supplier is required."})
@@ -92,14 +88,13 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
         if supplier.sub != "creditor":
             raise serializers.ValidationError({"account_code": "Selected account is not a supplier."})
 
-        # 3. Get purchase account from AC_SETUP
         setup = ACSetup.objects.first()
         if not setup:
             raise serializers.ValidationError({"purchase_code": "AC_SETUP configuration not found."})
         if not setup.purchase_code:
             raise serializers.ValidationError({"purchase_code": "No purchase account configured in AC_SETUP."})
 
-        purchase_account_id = setup.purchase_code  # integer
+        purchase_account_id = setup.purchase_code
         try:
             purchase_party = Party.objects.get(id=purchase_account_id)
         except Party.DoesNotExist:
@@ -114,7 +109,6 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
 
         data['purchase_code'] = purchase_party
 
-        # 4. Validate details
         details = data.get('details', [])
         if not details:
             raise serializers.ValidationError({"details": "At least one item is required."})
@@ -134,6 +128,13 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = Decimal(str(qty)) * Decimal(str(rate))
 
+            # weight_kg is optional – if provided, ensure non‑negative
+            weight_kg = detail.get('weight_kg')
+            if weight_kg is not None and Decimal(str(weight_kg)) < 0:
+                raise serializers.ValidationError({
+                    "details": f"Weight (kg) must be >= 0 for row {row}."
+                })
+
             # Validate location (optional)
             loc = detail.get('location')
             if loc is not None and not isinstance(loc, (int, Location)):
@@ -142,13 +143,6 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
                 except (ValueError, TypeError):
                     raise serializers.ValidationError({"details": f"Invalid location for row {row}."})
                 detail['location'] = loc
-
-            # weight_per_unit optional – if provided, ensure non-negative
-            weight_per_unit = detail.get('weight_per_unit')
-            if weight_per_unit is not None and Decimal(str(weight_per_unit)) < 0:
-                raise serializers.ValidationError({
-                    "details": f"Weight per unit must be >= 0 for row {row}."
-                })
 
         discount = data.get('discount') or Decimal('0.00')
         if discount < 0:
@@ -159,14 +153,10 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         details_data = validated_data.pop('details', [])
-        print("🔍 DEBUG: Details data received:", details_data)
-
         purchase = PurchaseMaster.objects.create(**validated_data)
 
         for detail in details_data:
-            print("🔍 DEBUG: Detail before pop:", detail)
             location = detail.pop('location', None)
-            # weight_per_unit is passed; weight_kg/lbs will be auto-calculated in model.save()
             PurchaseDetail.objects.create(
                 vtype=purchase.vtype,
                 vno=purchase.vno,
@@ -183,7 +173,6 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         details_data = validated_data.pop('details', None)
-        print("🔍 DEBUG: Update details data:", details_data)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

@@ -14,9 +14,8 @@ class SaleDetailSerializer(serializers.ModelSerializer):
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
     location_display = serializers.CharField(source='location.name', read_only=True)
 
-    # Weight fields
-    weight_per_unit = serializers.DecimalField(max_digits=10, decimal_places=3, required=False)
-    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    # ─── Weight fields ────────────────────────────────────────────────────
+    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, required=False)
     weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
 
     location = serializers.PrimaryKeyRelatedField(
@@ -32,10 +31,11 @@ class SaleDetailSerializer(serializers.ModelSerializer):
             'uom', 'uom_display',
             'qty', 'rate', 'amount',
             'location', 'location_display',
-            'weight_per_unit', 'weight_kg', 'weight_lbs'
+            'weight_kg', 'weight_lbs'
         )
         extra_kwargs = {
-            'location': {'required': False, 'allow_null': True}
+            'location': {'required': False, 'allow_null': True},
+            'weight_kg': {'required': False},
         }
 
 
@@ -137,11 +137,11 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"details": f"Invalid location for row {row}."})
                 detail['location'] = loc
 
-            # Validate weight_per_unit (optional, must be >= 0)
-            weight_per_unit = detail.get('weight_per_unit')
-            if weight_per_unit is not None and Decimal(str(weight_per_unit)) < 0:
+            # weight_kg validation (optional)
+            weight_kg = detail.get('weight_kg')
+            if weight_kg is not None and Decimal(str(weight_kg)) < 0:
                 raise serializers.ValidationError({
-                    "details": f"Weight per unit must be >= 0 for row {row}."
+                    "details": f"Weight (kg) must be >= 0 for row {row}."
                 })
 
         return data

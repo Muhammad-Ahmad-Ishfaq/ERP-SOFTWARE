@@ -1,4 +1,3 @@
-# apps/purchaseOrders/serializers.py
 from rest_framework import serializers
 from django.db import transaction
 from decimal import Decimal
@@ -6,14 +5,13 @@ from .models import PurchaseOrderMaster, PurchaseOrderDetail
 from apps.accounting.models import Party
 from apps.users.models import User
 
-
 class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
 
-    # Weight fields – weight_kg and weight_lbs are read‑only
+    # ─── Weight fields ────────────────────────────────────────────────────
     weight_per_unit = serializers.DecimalField(max_digits=10, decimal_places=3, required=False)
-    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, required=False)
     weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
 
     class Meta:
@@ -24,6 +22,10 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
             'qty', 'rate', 'amount',
             'weight_per_unit', 'weight_kg', 'weight_lbs'
         )
+        extra_kwargs = {
+            'weight_per_unit': {'required': False},
+            'weight_kg': {'required': False},
+        }
 
 
 class PurchaseOrderMasterSerializer(serializers.ModelSerializer):
@@ -56,13 +58,11 @@ class PurchaseOrderMasterCreateSerializer(serializers.ModelSerializer):
     def validate(self, data):
         print("📥 Incoming PO data:", data)
 
-        # Required fields
         required = ['vtype', 'vno', 'vdate', 'supplier']
         for field in required:
             if not data.get(field):
                 raise serializers.ValidationError({field: f"{field} is required."})
 
-        # Validate supplier
         supplier = data.get('supplier')
         if supplier:
             try:
@@ -74,7 +74,6 @@ class PurchaseOrderMasterCreateSerializer(serializers.ModelSerializer):
             except Party.DoesNotExist:
                 raise serializers.ValidationError({"supplier": "Supplier does not exist."})
 
-        # Validate details
         details = data.get('details', [])
         if not details:
             raise serializers.ValidationError({"details": "At least one item is required."})
@@ -94,14 +93,13 @@ class PurchaseOrderMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = float(qty) * float(rate)
 
-            # weight_per_unit is optional – if provided, ensure it's non-negative
-            weight_per_unit = detail.get('weight_per_unit')
-            if weight_per_unit is not None and float(weight_per_unit) < 0:
+            # weight_kg validation (optional)
+            weight_kg = detail.get('weight_kg')
+            if weight_kg is not None and float(weight_kg) < 0:
                 raise serializers.ValidationError({
-                    "details": f"Weight per unit must be >= 0 for row {row}."
+                    "details": f"Weight (kg) must be >= 0 for row {row}."
                 })
 
-        # Validate user_no
         user_no = data.get('user_no')
         if user_no:
             if not isinstance(user_no, User) and not isinstance(user_no, int):
@@ -112,7 +110,6 @@ class PurchaseOrderMasterCreateSerializer(serializers.ModelSerializer):
             except User.DoesNotExist:
                 raise serializers.ValidationError({"user_no": "User does not exist."})
 
-        print("✅ PO validation successful.")
         return data
 
     @transaction.atomic

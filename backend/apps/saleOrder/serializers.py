@@ -11,9 +11,8 @@ class SaleOrderDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
 
-    # Weight fields – weight_kg and weight_lbs are read‑only
-    weight_per_unit = serializers.DecimalField(max_digits=10, decimal_places=3, required=False)
-    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    # ─── Weight fields ────────────────────────────────────────────────────
+    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, required=False)
     weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
 
     class Meta:
@@ -22,8 +21,11 @@ class SaleOrderDetailSerializer(serializers.ModelSerializer):
             'id', 'vsn', 'item_code', 'item_code_display',
             'uom', 'uom_display',
             'qty', 'rate', 'amount',
-            'weight_per_unit', 'weight_kg', 'weight_lbs'
+            'weight_kg', 'weight_lbs'
         )
+        extra_kwargs = {
+            'weight_kg': {'required': False},
+        }
 
 
 class SaleOrderMasterSerializer(serializers.ModelSerializer):
@@ -90,11 +92,11 @@ class SaleOrderMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = Decimal(str(qty)) * Decimal(str(rate))
 
-            # weight_per_unit is optional – ensure non‑negative if provided
-            weight_per_unit = detail.get('weight_per_unit')
-            if weight_per_unit is not None and Decimal(str(weight_per_unit)) < 0:
+            # weight_kg validation (optional)
+            weight_kg = detail.get('weight_kg')
+            if weight_kg is not None and Decimal(str(weight_kg)) < 0:
                 raise serializers.ValidationError({
-                    "details": f"Weight per unit must be >= 0 for row {row}."
+                    "details": f"Weight (kg) must be >= 0 for row {row}."
                 })
 
         return data
