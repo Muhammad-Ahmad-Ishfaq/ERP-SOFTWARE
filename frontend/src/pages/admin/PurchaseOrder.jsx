@@ -1,4 +1,4 @@
-// src/pages/admin/Purchases.jsx
+// src/pages/admin/PurchaseOrder.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import AddPurchaseModal from '../../components/Purchases/AddPurchaseModal';
+import AddPurchaseOrderModal from '../../components/PurchaseOrders/AddPurchaseOrderModal'; // ✅ fixed path
 import { Badge } from '@/components/ui/badge';
 
 // ─── Stat Card ───
@@ -56,11 +56,12 @@ const EmptyState = ({ icon: Icon, title, description, actionLabel, onAction }) =
 // ─── Status Badge ───
 const StatusBadge = ({ status }) => {
   const statusMap = {
-    A: { label: 'Active', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    C: { label: 'Completed', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-    V: { label: 'Void', className: 'bg-red-50 text-red-700 border-red-200' },
+    P: { label: 'Pending', className: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+    D: { label: 'Draft', className: 'bg-gray-50 text-gray-700 border-gray-200' },
+    C: { label: 'Completed', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    V: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
   };
-  const s = statusMap[status] || statusMap.A;
+  const s = statusMap[status] || statusMap.P;
   return (
     <Badge variant="outline" className={`px-3 py-0.5 text-xs font-medium rounded-full border ${s.className}`}>
       {s.label}
@@ -82,8 +83,8 @@ const SearchBar = ({ value, onChange, placeholder }) => (
 );
 
 // ─── Helpers ───
-const computeTotals = (purchase) => {
-  const details = purchase.details || [];
+const computeTotals = (po) => {
+  const details = po.details || [];
   const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
   const grandTotal = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
   const totalWeightKg = details.reduce((sum, d) => sum + (parseFloat(d.weight_kg) || 0), 0);
@@ -91,8 +92,8 @@ const computeTotals = (purchase) => {
   return { totalQty, grandTotal, totalWeightKg, totalWeightLbs };
 };
 
-const getLocations = (purchase) => {
-  const details = purchase.details || [];
+const getLocations = (po) => {
+  const details = po.details || [];
   const locs = details
     .map(d => d.location_display || d.location_name || '')
     .filter(Boolean);
@@ -100,23 +101,27 @@ const getLocations = (purchase) => {
 };
 
 // ─── Main Component ───
-const Purchases = () => {
+const PurchaseOrder = () => {
   const [loading, setLoading] = useState(false);
-  const [purchases, setPurchases] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingPurchase, setEditingPurchase] = useState(null);
+  const [editingPO, setEditingPO] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/purchases/purchase-master/');
-      setPurchases(res.data);
+      const res = await api.get('/purchase-orders/purchase-orders/');
+      const data = (res.data || []).map(po => ({
+        ...po,
+        details: po.details || [],
+      }));
+      setPurchaseOrders(data);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to load purchases');
+      toast.error('Failed to load purchase orders');
     } finally {
       setLoading(false);
     }
@@ -127,23 +132,22 @@ const Purchases = () => {
   }, []);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return purchases;
+    if (!search.trim()) return purchaseOrders;
     const q = search.toLowerCase();
-    return purchases.filter(
+    return purchaseOrders.filter(
       (p) =>
         p.vtype?.toLowerCase().includes(q) ||
         String(p.vno).includes(q) ||
-        p.account_code_display?.toLowerCase().includes(q) ||
-        p.purchase_code_display?.toLowerCase().includes(q) ||
+        p.supplier_name?.toLowerCase().includes(q) ||
         getLocations(p).toLowerCase().includes(q)
     );
-  }, [purchases, search]);
+  }, [purchaseOrders, search]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
-      await api.delete(`/purchases/purchase-master/${deleteId}/`);
-      toast.success('Purchase deleted');
+      await api.delete(`/purchase-orders/purchase-orders/${deleteId}/`);
+      toast.success('Purchase Order deleted');
       fetchData();
     } catch (error) {
       toast.error('Failed to delete');
@@ -157,23 +161,23 @@ const Purchases = () => {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold">Purchase Bills</h1>
+          <h1 className="text-2xl font-bold">Purchase Orders</h1>
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <SearchBar
             value={search}
             onChange={setSearch}
-            placeholder="Search Purchase Bills"
+            placeholder="Search Purchase Orders"
           />
           <Button
             onClick={() => {
-              setEditingPurchase(null);
+              setEditingPO(null);
               setModalOpen(true);
             }}
             className="bg-green-600 hover:bg-green-700 text-white rounded-xs text-sm h-9 px-4"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Purchase
+            Add PO
           </Button>
         </div>
       </div>
@@ -183,8 +187,8 @@ const Purchases = () => {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200">
-                <th className="w-24 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="w-12 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">VNO</th>
+                <th className="w-20 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="w-8 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">VNO</th>
                 <th className="px-5 py-3 border-r border-gray-300 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Supplier</th>
                 <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Warehouse</th>
                 <th className="w-20 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
@@ -207,11 +211,11 @@ const Purchases = () => {
                   <td colSpan="10">
                     <EmptyState
                       icon={ShoppingCart}
-                      title="No purchases found"
-                      description="Create your first purchase to track your inventory purchases."
-                      actionLabel="Add Purchase"
+                      title="No purchase orders found"
+                      description="Create your first purchase order to track orders with suppliers."
+                      actionLabel="Add PO"
                       onAction={() => {
-                        setEditingPurchase(null);
+                        setEditingPO(null);
                         setModalOpen(true);
                       }}
                     />
@@ -230,7 +234,7 @@ const Purchases = () => {
                         <span className="inline-flex font-mono text-sm font-medium">{p.vno}</span>
                       </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-gray-900">
-                        {p.account_code_display || '-'}
+                        {p.supplier_name || '-'}
                       </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center text-sm text-gray-700">
                         {locations}
@@ -254,7 +258,7 @@ const Purchases = () => {
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => {
-                              setEditingPurchase(p);
+                              setEditingPO(p);
                               setModalOpen(true);
                             }}
                             className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -278,19 +282,19 @@ const Purchases = () => {
         </div>
       </div>
 
-      <AddPurchaseModal
+      <AddPurchaseOrderModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        editingPurchase={editingPurchase}
+        editingPO={editingPO}
         onSave={fetchData}
       />
 
       <AlertDialog open={deleteDialog} onOpenChange={setDeleteDialog}>
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg font-semibold text-gray-900">Delete Purchase</AlertDialogTitle>
+            <AlertDialogTitle className="text-lg font-semibold text-gray-900">Delete Purchase Order</AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-gray-500">
-              This purchase record will be permanently removed. This action cannot be undone.
+              This purchase order will be permanently removed. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -307,4 +311,4 @@ const Purchases = () => {
   );
 };
 
-export default Purchases;
+export default PurchaseOrder;

@@ -492,7 +492,6 @@ const Items = () => {
                                 return unit ? unit.UOM_NAME : '-';
                               })()}
                             </TableCell>
-                            {/* ─── Weight columns ─── */}
                             <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
                               {Number(item.WEIGHT_KG || 0).toFixed(3)}
                             </TableCell>
