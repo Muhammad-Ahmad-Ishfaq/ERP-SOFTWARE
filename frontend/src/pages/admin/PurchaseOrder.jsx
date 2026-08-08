@@ -18,8 +18,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import AddPurchaseOrderModal from '../../components/PurchaseOrders/AddPurchaseOrderModal'; // ✅ fixed path
 import { Badge } from '@/components/ui/badge';
+import AddPurchaseOrderModal from '@/components/Purchase Order/AddPurchaseOrderModal';
 
 // ─── Stat Card ───
 const StatCard = ({ icon: Icon, label, value }) => (
