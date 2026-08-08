@@ -1,5 +1,6 @@
 # apps/purchases/models.py
 from django.db import models
+from decimal import Decimal
 from apps.users.models import User
 from apps.accounting.models import Party
 from apps.inventory.models import Item, Unit
@@ -11,7 +12,6 @@ class PurchaseMaster(models.Model):
     vno = models.IntegerField(db_column='VNO')
     vdate = models.DateField(db_column='VDATE')
     dc_no = models.CharField(max_length=10, db_column='DC_NO', blank=True, null=True)
-    # ✅ Keep nullable but PROTECT when set
     account_code = models.ForeignKey(
         Party,
         on_delete=models.PROTECT,
@@ -83,21 +83,16 @@ class PurchaseDetail(models.Model):
         related_name='purchase_details'
     )
 
-    # ─── Weight fields ────────────────────────────────────────────────────
-    weight_per_unit = models.DecimalField(
-        max_digits=10, decimal_places=3,
-        default=0,
-        help_text="Weight per unit (kg) – taken from item at purchase time"
-    )
+    # ─── Weight fields (removed weight_per_unit) ─────────────────────────
     weight_kg = models.DecimalField(
         max_digits=15, decimal_places=3,
         default=0,
-        help_text="Total weight in kg (qty × weight_per_unit)"
+        help_text="Total weight in kilograms"
     )
     weight_lbs = models.DecimalField(
         max_digits=15, decimal_places=3,
         default=0,
-        help_text="Total weight in lbs (weight_kg × 2.2040)"
+        help_text="Total weight in pounds (kg × 2.2040)"
     )
 
     purchase_master = models.ForeignKey(
@@ -116,12 +111,10 @@ class PurchaseDetail(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        # Auto‑calculate weight_kg and weight_lbs if qty and weight_per_unit are set
-        if self.qty and self.weight_per_unit:
-            self.weight_kg = self.qty * self.weight_per_unit
+        # Auto‑calculate weight_lbs from weight_kg
+        if self.weight_kg:
             self.weight_lbs = self.weight_kg * Decimal('2.2040')
         else:
-            self.weight_kg = 0
             self.weight_lbs = 0
         super().save(*args, **kwargs)
 

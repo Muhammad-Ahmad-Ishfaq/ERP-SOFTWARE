@@ -1,3 +1,4 @@
+# apps/purchases/serializers.py
 from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Sum
@@ -6,6 +7,7 @@ from .models import PurchaseMaster, PurchaseDetail
 from apps.accounting.models import VoucherMaster, VoucherDetail, Party
 from apps.ac_setup.models import ACSetup
 from apps.locations.models import Location
+
 
 class PurchaseDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)

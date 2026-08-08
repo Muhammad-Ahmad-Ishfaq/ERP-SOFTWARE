@@ -57,7 +57,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     user_no: '',
   });
 
-  // ── Dynamic detail rows (no weight_per_unit) ──
+  // ── Dynamic detail rows ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
