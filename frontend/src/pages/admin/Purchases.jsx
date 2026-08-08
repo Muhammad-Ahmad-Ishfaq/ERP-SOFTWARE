@@ -86,13 +86,14 @@ const computeTotals = (purchase) => {
   const details = purchase.details || [];
   const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
   const grandTotal = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
-  return { totalQty, grandTotal };
+  const totalWeightKg = details.reduce((sum, d) => sum + (parseFloat(d.weight_kg) || 0), 0);
+  const totalWeightLbs = details.reduce((sum, d) => sum + (parseFloat(d.weight_lbs) || 0), 0);
+  return { totalQty, grandTotal, totalWeightKg, totalWeightLbs };
 };
 
 // ─── Get distinct locations from details ───
 const getLocations = (purchase) => {
   const details = purchase.details || [];
-  // Use location_display (returned by serializer) or fallback to location name
   const locs = details
     .map(d => d.location_display || d.location_name || '')
     .filter(Boolean);
@@ -188,8 +189,10 @@ const Purchases = () => {
                 <th className="w-24 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
                 <th className="w-12 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">VNO</th>
                 <th className="px-5 py-3 border-r border-gray-300 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Supplier</th>
-                <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Ware house</th>  {/* NEW */}
+                <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Warehouse</th>
                 <th className="w-24 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Quantity</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (kg)</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (lbs)</th>
                 <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Grand Total</th>
                 <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="w-28 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -198,13 +201,13 @@ const Purchases = () => {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="px-5 py-12 text-center">
+                  <td colSpan="10" className="px-5 py-12 text-center">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-gray-600" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="8">
+                  <td colSpan="10">
                     <EmptyState
                       icon={ShoppingCart}
                       title="No purchases found"
@@ -219,7 +222,7 @@ const Purchases = () => {
                 </tr>
               ) : (
                 filtered.map((p) => {
-                  const { totalQty, grandTotal } = computeTotals(p);
+                  const { totalQty, grandTotal, totalWeightKg, totalWeightLbs } = computeTotals(p);
                   const locations = getLocations(p);
                   return (
                     <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
@@ -234,11 +237,17 @@ const Purchases = () => {
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-gray-900">
                         {p.account_code_display || '-'}
                       </td>
-                      <td className="px-5 py-3.5 border-r border-b text-center border-gray-300 text-sm text-gray-700">
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center text-sm text-gray-700">
                         {locations}
                       </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-right font-medium text-blue-700">
                         {totalQty.toFixed(3)}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-gray-700">
+                        {totalWeightKg.toFixed(3)}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-gray-700">
+                        {totalWeightLbs.toFixed(3)}
                       </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-green-700">
                         {grandTotal.toFixed(2)}
