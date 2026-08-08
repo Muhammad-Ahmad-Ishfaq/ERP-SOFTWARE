@@ -71,7 +71,6 @@ const Inventory = () => {
   const fetchInventory = async () => {
     setLoading(true);
     try {
-      // Fetch purchases, sales, and items in parallel
       const [purchasesRes, salesRes, itemsRes] = await Promise.all([
         api.get('/purchases/purchase-master/'),
         api.get('/sales/sale-master/'),
@@ -97,6 +96,16 @@ const Inventory = () => {
           const locationName = detail.location_display || 'Main Store';
           const key = `${itemId}-${locationName}`;
 
+          const qty = parseFloat(detail.qty) || 0;
+          const rate = parseFloat(detail.rate) || 0;
+          // ✅ Fallback: if detail.weight_kg is missing, compute from item.WEIGHT_KG * qty
+          let weightKg = parseFloat(detail.weight_kg) || 0;
+          let weightLbs = parseFloat(detail.weight_lbs) || 0;
+          if (weightKg === 0 && item.WEIGHT_KG) {
+            weightKg = parseFloat(item.WEIGHT_KG) * qty;
+            weightLbs = weightKg * 2.2046;
+          }
+
           if (!stockMap.has(key)) {
             stockMap.set(key, {
               item_id: itemId,
@@ -113,11 +122,6 @@ const Inventory = () => {
           }
 
           const entry = stockMap.get(key);
-          const qty = parseFloat(detail.qty) || 0;
-          const rate = parseFloat(detail.rate) || 0;
-          const weightKg = parseFloat(detail.weight_kg) || 0;
-          const weightLbs = parseFloat(detail.weight_lbs) || 0;
-
           entry.quantity += qty;
           entry.total_cost += qty * rate;
           entry.total_weight_kg += weightKg;
@@ -140,6 +144,15 @@ const Inventory = () => {
           const locationName = detail.location_display || 'Main Store';
           const key = `${itemId}-${locationName}`;
 
+          const qty = parseFloat(detail.qty) || 0;
+          // Fallback for sale weight
+          let weightKg = parseFloat(detail.weight_kg) || 0;
+          let weightLbs = parseFloat(detail.weight_lbs) || 0;
+          if (weightKg === 0 && item.WEIGHT_KG) {
+            weightKg = parseFloat(item.WEIGHT_KG) * qty;
+            weightLbs = weightKg * 2.2046;
+          }
+
           if (!stockMap.has(key)) {
             stockMap.set(key, {
               item_id: itemId,
@@ -156,22 +169,9 @@ const Inventory = () => {
           }
 
           const entry = stockMap.get(key);
-          const qty = parseFloat(detail.qty) || 0;
-          const weightKg = parseFloat(detail.weight_kg) || 0;
-          const weightLbs = parseFloat(detail.weight_lbs) || 0;
-
           entry.quantity -= qty;
-          // Subtract weight proportionally? For simplicity we subtract the sold weight.
-          // If weight fields are not stored on sale details, we cannot subtract weight.
-          // For now we'll just subtract quantity and leave weight unchanged.
-          // But to be accurate, we should subtract the weight of the sold items.
-          // Since we have weight_kg/lbs on sale details, we can subtract them.
-          // However, we need to ensure the sale details have weight fields.
-          // We'll subtract if available, else ignore.
-          if (detail.weight_kg !== undefined) {
-            entry.total_weight_kg -= weightKg;
-            entry.total_weight_lbs -= weightLbs;
-          }
+          entry.total_weight_kg -= weightKg;
+          entry.total_weight_lbs -= weightLbs;
         }
       }
 
@@ -184,7 +184,6 @@ const Inventory = () => {
           ...entry,
           average_cost: avgCost,
           stock_value: totalCost,
-          // Ensure weight doesn't go negative
           total_weight_kg: Math.max(0, entry.total_weight_kg),
           total_weight_lbs: Math.max(0, entry.total_weight_lbs),
         };
@@ -257,44 +256,44 @@ const Inventory = () => {
           </div>
         </div>
         <div className='flex items-center gap-3'>
-            <div className='flex items-center gap-3'>
-                <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by item or code..."
-              className="w-full pl-9 pr-4 py-1 border border-gray-300 rounded-xs text-sm focus:ring focus:ring-orange-500 focus:border-orange-500 outline-none"
-            />
-          </div>
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="h-7 px-3 border border-gray-300 rounded-xs text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
-          >
-            <option value="all">All Locations</option>
-            {locations.map(loc => (
-              <option key={loc} value={loc}>{loc}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-7 px-3 border border-gray-300 rounded-xs text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
-          >
-            <option value="all">All Status</option>
-            <option value="available">In Stock</option>
-            <option value="low">Low Stock</option>
-            <option value="out">Out of Stock</option>
-          </select>
+          <div className='flex items-center gap-3'>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by item or code..."
+                className="w-full pl-9 pr-4 py-1 border border-gray-300 rounded-xs text-sm focus:ring focus:ring-orange-500 focus:border-orange-500 outline-none"
+              />
             </div>
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              className="h-7 px-3 border border-gray-300 rounded-xs text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
+            >
+              <option value="all">All Locations</option>
+              {locations.map(loc => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-7 px-3 border border-gray-300 rounded-xs text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
+            >
+              <option value="all">All Status</option>
+              <option value="available">In Stock</option>
+              <option value="low">Low Stock</option>
+              <option value="out">Out of Stock</option>
+            </select>
+          </div>
           <div className="">
-          <Button className="bg-orange-600 hover:bg-orange-700 text-white rounded-xs">
-            <Plus className="h-4 w-4 mr-2" />
-            Stock Adjustment
-          </Button>
-        </div>
+            <Button className="bg-orange-600 hover:bg-orange-700 text-white rounded-xs">
+              <Plus className="h-4 w-4 mr-2" />
+              Stock Adjustment
+            </Button>
+          </div>
         </div>
       </div>
 
