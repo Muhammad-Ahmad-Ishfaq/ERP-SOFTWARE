@@ -56,7 +56,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     user_no: '',
   });
 
-  // ── Dynamic detail rows (no weight_per_unit) ──
+  // ── Dynamic detail rows ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -258,6 +258,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     toast.success(`Sale Order #${so.vno} loaded`);
   };
 
+  // ─── Recalculate weight and amount ───
   const recalcRow = (row) => {
     const weightKg = parseFloat(row.weight_kg) || 0;
     const rate = parseFloat(row.rate) || 0;
@@ -266,6 +267,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return { ...row, weight_lbs: weightLbs, amount };
   };
 
+  // ─── Handlers ───
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
   };
@@ -274,6 +276,17 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
+    // If item_code changes, auto-fill UOM and weight from item
+    if (field === 'item_code') {
+      const selectedItem = items.find(i => i.ITEM_ID === parseInt(value));
+      if (selectedItem) {
+        updated.uom = selectedItem.UOM?.UOM_ID || '';
+        updated.weight_kg = parseFloat(selectedItem.WEIGHT_KG) || 0;
+        // Recalc will be triggered by weight_kg change
+      }
+    }
+
+    // Recalculate weight and amount if weight_kg or rate changes
     if (field === 'weight_kg' || field === 'rate') {
       updated = recalcRow(updated);
     }
@@ -654,7 +667,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                 </div>
               </div>
 
-              {/* Items Table – updated columns */}
+              {/* Items Table */}
               <div className="overflow-hidden">
                 <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
                   <h3 className="text-md font-semibold text-gray-900">Items</h3>
@@ -695,7 +708,10 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                             <td className="border-r border-b border-gray-300 p-0">
                               <Combobox
                                 value={row.item_code}
-                                onChange={(val) => handleDetailChange(index, 'item_code', val)}
+                                onChange={(val) => {
+                                  // Auto-fill UOM and weight from item
+                                  handleDetailChange(index, 'item_code', val);
+                                }}
                               >
                                 <div className="relative">
                                   <Combobox.Input
