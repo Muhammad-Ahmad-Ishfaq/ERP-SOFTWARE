@@ -487,7 +487,10 @@ const Items = () => {
                             </TableCell>
                             <TableCell className="font-medium py-3 px-4 border-r border-b border-gray-200">{item.ITEM_NAME}</TableCell>
                             <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
-                              {item.UOM?.UOM_NAME || item.unit_short_name || '-'}
+                              {(() => {
+                                const unit = units.find(u => u.UOM_ID === item.UOM_id);
+                                return unit ? unit.UOM_NAME : '-';
+                              })()}
                             </TableCell>
                             {/* ─── Weight columns ─── */}
                             <TableCell className="text-center py-3 px-4 border-r border-b border-gray-200">
