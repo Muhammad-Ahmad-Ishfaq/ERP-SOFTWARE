@@ -167,6 +167,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     }
   }, [open, isDrawerOpen]);
 
+  // ── Load edit data ──
   useEffect(() => {
     if (editingPurchase && open) {
       setMaster({
@@ -187,12 +188,12 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
         vsn: d.vsn || i + 1,
         item_code: d.item_code || '',
         uom: d.uom || '',
-        qty: d.qty || 0,
-        rate: d.rate || 0,
-        amount: d.amount || 0,
+        qty: parseFloat(d.qty) || 0,
+        rate: parseFloat(d.rate) || 0,
+        amount: parseFloat(d.amount) || 0,
         location: d.location || null,
-        weight_kg: d.weight_kg || 0,
-        weight_lbs: d.weight_lbs || 0,
+        weight_kg: parseFloat(d.weight_kg) || 0,
+        weight_lbs: parseFloat(d.weight_lbs) || 0,
       }));
       while (newDetails.length < 8) {
         newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -218,6 +219,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     }
   }, [editingPurchase, open, nextVoucherNo]);
 
+  // ── Load PO data ──
   const loadPOData = (po) => {
     setMaster(prev => ({
       ...prev,
@@ -235,12 +237,12 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
       vsn: d.vsn || i + 1,
       item_code: d.item_code || '',
       uom: d.uom || '',
-      qty: d.qty || 0,
-      rate: d.rate || 0,
-      amount: d.amount || 0,
+      qty: parseFloat(d.qty) || 0,
+      rate: parseFloat(d.rate) || 0,
+      amount: parseFloat(d.amount) || 0,
       location: d.location || null,
-      weight_kg: d.weight_kg || 0,
-      weight_lbs: d.weight_lbs || 0,
+      weight_kg: parseFloat(d.weight_kg) || 0,
+      weight_lbs: parseFloat(d.weight_lbs) || 0,
     }));
     while (newDetails.length < 8) {
       newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -264,6 +266,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     toast.success(`Purchase Order #${po.vno} loaded`);
   };
 
+  // ── Recalculate weight and amount ──
   const recalcRow = (row) => {
     const weightKg = parseFloat(row.weight_kg) || 0;
     const rate = parseFloat(row.rate) || 0;
@@ -272,6 +275,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     return { ...row, weight_lbs: weightLbs, amount };
   };
 
+  // ── Handlers ──
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
   };
@@ -828,7 +832,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                               />
                             </td>
                             <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
-                              {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                              {Number(row.weight_lbs).toFixed(3)}
                             </td>
                             <td className="border-r border-b border-gray-300">
                               <input
