@@ -83,8 +83,7 @@ const computeSaleTotals = (sale) => {
   const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
   const totalAmount = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
   const discount = parseFloat(sale.discount) || 0;
-  const netAmount = totalAmount - (totalAmount * discount) / 100; // if discount is percentage
-  // Alternative if discount is flat: netAmount = totalAmount - discount;
+  const netAmount = totalAmount - (totalAmount * discount) / 100;
   return { totalQty, totalAmount, netAmount };
 };
 
@@ -102,8 +101,7 @@ const Revenue = () => {
       const salesData = res.data || [];
       setSales(salesData);
 
-      // If details are not included in the list response, fetch them per sale
-      // Check if first sale has details
+      // Fetch details if missing
       if (salesData.length > 0 && !salesData[0].details) {
         const promises = salesData.map(async (sale) => {
           const detailRes = await api.get(`/sales/sale-master/${sale.id}/`);
@@ -116,7 +114,6 @@ const Revenue = () => {
         });
         setDetailsMap(map);
       } else {
-        // Otherwise, build map from existing details
         const map = {};
         salesData.forEach((sale) => {
           map[sale.id] = sale.details || [];
@@ -156,20 +153,28 @@ const Revenue = () => {
     );
   }, [enrichedSales, search]);
 
-  // ── Summary stats (only completed sales for revenue) ──
+  // ── Summary stats – now includes ALL sales ──
   const summary = useMemo(() => {
-    const completed = enrichedSales.filter(s => s.stts === 'C');
-    const totalRevenue = completed.reduce((sum, s) => {
+    // All sales (including pending, draft, etc.)
+    const totalRevenueAll = enrichedSales.reduce((sum, s) => {
       const { netAmount } = computeSaleTotals(s);
       return sum + netAmount;
     }, 0);
-    const totalInvoices = completed.length;
-    const totalItemsSold = completed.reduce((sum, s) => {
+    const totalInvoicesAll = enrichedSales.length;
+    const totalItemsSoldAll = enrichedSales.reduce((sum, s) => {
       const { totalQty } = computeSaleTotals(s);
       return sum + totalQty;
     }, 0);
-    const avgInvoice = totalInvoices > 0 ? totalRevenue / totalInvoices : 0;
-    return { totalRevenue, totalInvoices, totalItemsSold, avgInvoice };
+    const avgInvoiceAll = totalInvoicesAll > 0 ? totalRevenueAll / totalInvoicesAll : 0;
+
+    // Completed sales (actual revenue)
+    const completed = enrichedSales.filter(s => s.stts === 'C');
+    const totalRevenueCompleted = completed.reduce((sum, s) => {
+      const { netAmount } = computeSaleTotals(s);
+      return sum + netAmount;
+    }, 0);
+
+    return { totalRevenueAll, totalInvoicesAll, totalItemsSoldAll, avgInvoiceAll, totalRevenueCompleted };
   }, [enrichedSales]);
 
   return (
@@ -196,31 +201,31 @@ const Revenue = () => {
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards – now showing all sales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <SummaryCard
           icon={DollarSign}
-          label="Total Revenue"
-          value={`₨ ${summary.totalRevenue.toFixed(2)}`}
+          label="Total Revenue (All Sales)"
+          value={`₨ ${summary.totalRevenueAll.toFixed(2)}`}
+          subtitle="Includes pending & completed"
+        />
+        <SummaryCard
+          icon={TrendingUp}
+          label="Completed Revenue"
+          value={`₨ ${summary.totalRevenueCompleted.toFixed(2)}`}
           subtitle="Completed sales only"
         />
         <SummaryCard
           icon={ShoppingBag}
           label="Total Invoices"
-          value={summary.totalInvoices}
-          subtitle="Completed sales"
+          value={summary.totalInvoicesAll}
+          subtitle="All sales"
         />
         <SummaryCard
           icon={FileText}
           label="Items Sold"
-          value={summary.totalItemsSold.toFixed(3)}
+          value={summary.totalItemsSoldAll.toFixed(3)}
           subtitle="Total quantity sold"
-        />
-        <SummaryCard
-          icon={TrendingUp}
-          label="Average Invoice"
-          value={`₨ ${summary.avgInvoice.toFixed(2)}`}
-          subtitle="Per completed sale"
         />
       </div>
 
