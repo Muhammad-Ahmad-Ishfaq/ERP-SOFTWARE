@@ -67,6 +67,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     location: null,
     weight_kg: 0,
     weight_lbs: 0,
+    available_stock: 0, // ← new
   });
 
   const [details, setDetails] = useState(
@@ -80,6 +81,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   const [items, setItems] = useState([]);
   const [units, setUnits] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [inventoryData, setInventoryData] = useState([]); // ← new
 
   // ── Combobox queries ──
   const [customerQuery, setCustomerQuery] = useState('');
@@ -100,6 +102,69 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return 1;
   };
 
+  // ── Fetch inventory data ──
+  const fetchInventory = async () => {
+    try {
+      const [purchasesRes, salesRes, itemsRes] = await Promise.all([
+        api.get('/purchases/purchase-master/'),
+        api.get('/sales/sale-master/'),
+        api.get('/inventory/items/'),
+      ]);
+
+      const purchases = purchasesRes.data || [];
+      const sales = salesRes.data || [];
+      const items = itemsRes.data || [];
+
+      const stockMap = new Map();
+
+      // Add purchases
+      for (const purchase of purchases) {
+        const detailsRes = await api.get(`/purchases/purchase-master/${purchase.id}/`);
+        const details = detailsRes.data.details || [];
+        for (const detail of details) {
+          const itemId = detail.item_code;
+          const item = items.find(i => String(i.ITEM_ID) === String(itemId));
+          if (!item) continue;
+          const locationName = detail.location_display || 'Main Store';
+          const key = `${itemId}-${locationName}`;
+          const qty = parseFloat(detail.qty) || 0;
+          if (!stockMap.has(key)) {
+            stockMap.set(key, { item_id: itemId, location: locationName, quantity: 0 });
+          }
+          const entry = stockMap.get(key);
+          entry.quantity += qty;
+        }
+      }
+
+      // Subtract completed sales
+      for (const sale of sales) {
+        if (sale.stts !== 'C') continue;
+        const detailsRes = await api.get(`/sales/sale-master/${sale.id}/`);
+        const details = detailsRes.data.details || [];
+        for (const detail of details) {
+          const itemId = detail.item_code;
+          const item = items.find(i => String(i.ITEM_ID) === String(itemId));
+          if (!item) continue;
+          const locationName = detail.location_display || 'Main Store';
+          const key = `${itemId}-${locationName}`;
+          const qty = parseFloat(detail.qty) || 0;
+          if (stockMap.has(key)) {
+            stockMap.get(key).quantity -= qty;
+          }
+        }
+      }
+
+      const inventoryArray = Array.from(stockMap.values()).map(entry => ({
+        ...entry,
+        quantity: Math.max(0, entry.quantity),
+      }));
+      setInventoryData(inventoryArray);
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+    }
+  };
+
+  // ── Fetch next voucher number ──
   const fetchNextVoucherNo = async () => {
     try {
       const res = await api.get('/sales/sale-master/next-voucher/');
@@ -120,6 +185,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     }
   };
 
+  // ── Fetch dropdowns ──
   const fetchDropdowns = async () => {
     try {
       const [customersRes, itemsRes, unitsRes, locationsRes] = await Promise.all([
@@ -157,6 +223,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       setMaster(prev => ({ ...prev, user_no: userId }));
       fetchDropdowns();
       fetchNextVoucherNo();
+      fetchInventory(); // ← fetch inventory
       if (isDrawerOpen) {
         fetchPendingSOs();
       }
@@ -188,6 +255,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
         location: d.location || null,
         weight_kg: d.weight_kg || 0,
         weight_lbs: d.weight_lbs || 0,
+        available_stock: 0,
       }));
       while (newDetails.length < 8) {
         newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -235,6 +303,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       location: d.location || null,
       weight_kg: d.weight_kg || 0,
       weight_lbs: d.weight_lbs || 0,
+      available_stock: 0,
     }));
     while (newDetails.length < 8) {
       newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -267,6 +336,17 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return { ...row, weight_lbs: weightLbs, amount };
   };
 
+  // ─── Get available stock for item + location ───
+  const getAvailableStock = (itemId, locationId) => {
+    const locationName = locationId
+      ? locations.find(l => l.id === parseInt(locationId))?.name
+      : null;
+    const entry = inventoryData.find(
+      inv => inv.item_id === parseInt(itemId) && inv.location === (locationName || 'Main Store')
+    );
+    return entry ? entry.quantity : 0;
+  };
+
   // ─── Handlers ───
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
@@ -276,13 +356,26 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     const newDetails = [...details];
     let updated = { ...newDetails[index], [field]: value };
 
-    // If item_code changes, auto-fill UOM and weight from item
+    // If item_code changes, auto-fill UOM, weight, and available stock
     if (field === 'item_code') {
       const selectedItem = items.find(i => i.ITEM_ID === parseInt(value));
       if (selectedItem) {
         updated.uom = selectedItem.UOM?.UOM_ID || '';
         updated.weight_kg = parseFloat(selectedItem.WEIGHT_KG) || 0;
-        // Recalc will be triggered by weight_kg change
+        // Recalc weight & amount
+        updated = recalcRow(updated);
+        // Update available stock based on current location
+        const loc = updated.location;
+        updated.available_stock = getAvailableStock(value, loc);
+      }
+    }
+
+    // If location changes, update available stock
+    if (field === 'location') {
+      const loc = value;
+      const itemId = updated.item_code;
+      if (itemId) {
+        updated.available_stock = getAvailableStock(itemId, loc);
       }
     }
 
@@ -684,6 +777,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">UOM</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Avail. Stock</th> {/* NEW */}
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
@@ -709,7 +803,6 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                               <Combobox
                                 value={row.item_code}
                                 onChange={(val) => {
-                                  // Auto-fill UOM and weight from item
                                   handleDetailChange(index, 'item_code', val);
                                 }}
                               >
@@ -841,6 +934,10 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                                 </div>
                               </Combobox>
                             </td>
+                            {/* ─── Available Stock ─── */}
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-blue-600 px-3 py-1.5">
+                              {row.available_stock.toFixed(3)}
+                            </td>
                             <td className="border-r border-b border-gray-300">
                               <input
                                 type="number"
@@ -892,7 +989,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                     </tbody>
                     <tfoot className="bg-gray-200">
                       <tr className="border-t border-gray-300">
-                        <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
+                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">
                           Total Amount:
                         </td>
                         <td className="px-3 py-2 text-right font-bold text-red-600 text-base">
@@ -900,7 +997,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         </td>
                       </tr>
                       <tr className="border-t border-gray-300">
-                        <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
+                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">
                           Discount ({master.discount || 0}%):
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-red-500 text-base">
@@ -908,7 +1005,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
                         </td>
                       </tr>
                       <tr className="border-t-2 border-gray-300">
-                        <td colSpan="9" className="px-3 py-3 text-right font-bold text-gray-900">
+                        <td colSpan="10" className="px-3 py-3 text-right font-bold text-gray-900">
                           Grand Total:
                         </td>
                         <td className="px-3 py-3 text-right font-bold text-green-600 text-base">
