@@ -72,20 +72,6 @@ import toast from 'react-hot-toast';
 // ─── Colors ───
 const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#14b8a6'];
 
-const SOLID_COLORS = {
-  blue: 'bg-blue-600',
-  green: 'bg-emerald-600',
-  orange: 'bg-orange-600',
-  purple: 'bg-purple-600',
-  red: 'bg-red-600',
-  teal: 'bg-teal-600',
-  indigo: 'bg-indigo-600',
-  pink: 'bg-pink-600',
-  cyan: 'bg-cyan-600',
-  yellow: 'bg-yellow-600',
-  gray: 'bg-gray-600',
-};
-
 const GRADIENTS = {
   blue: 'from-blue-500 to-blue-600',
   green: 'from-emerald-500 to-emerald-600',
@@ -100,7 +86,7 @@ const GRADIENTS = {
   gray: 'from-gray-500 to-gray-600',
 };
 
-// ─── KPI Card Component ───
+// ─── KPI Card ───
 const GradientKpiCard = ({
   title,
   value,
@@ -125,9 +111,7 @@ const GradientKpiCard = ({
               ) : (
                 <ArrowDownRight className="h-3.5 w-3.5 text-white" />
               )}
-              <span className={`text-xs font-semibold text-white`}>
-                {trend > 0 ? '+' : ''}{trend}%
-              </span>
+              <span className="text-xs font-semibold text-white">{trend > 0 ? '+' : ''}{trend}%</span>
               <span className="text-xs text-white/70">{trendLabel || 'vs last month'}</span>
             </div>
           )}
@@ -172,8 +156,12 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [saleOrders, setSaleOrders] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [payments, setPayments] = useState({ received: 0, paid: 0 });
+  const [cashBalance, setCashBalance] = useState(0);
+  const [bankBalance, setBankBalance] = useState(0);
   const [fetchError, setFetchError] = useState(null);
 
   const fetchData = async () => {
@@ -181,21 +169,71 @@ const Dashboard = () => {
     setFetchError(null);
     try {
       console.log('📊 Fetching dashboard data...');
-      const [salesRes, purchasesRes, vouchersRes] = await Promise.all([
+      const [salesRes, purchasesRes, vouchersRes, partiesRes, saleOrdersRes, purchaseOrdersRes] = await Promise.all([
         api.get('/sales/sale-master/'),
         api.get('/purchases/purchase-master/'),
         api.get('/accounting/vouchers/?vtype=JV'),
+        api.get('/accounting/parties/'),
+        api.get('/sale-orders/sale-orders/'),
+        api.get('/purchase-orders/purchase-orders/'),
       ]);
 
       const salesData = Array.isArray(salesRes.data) ? salesRes.data : [];
       const purchasesData = Array.isArray(purchasesRes.data) ? purchasesRes.data : [];
       const vouchersData = Array.isArray(vouchersRes.data) ? vouchersRes.data : [];
+      const partiesData = Array.isArray(partiesRes.data) ? partiesRes.data : [];
+      const saleOrdersData = Array.isArray(saleOrdersRes.data) ? saleOrdersRes.data : [];
+      const purchaseOrdersData = Array.isArray(purchaseOrdersRes.data) ? purchaseOrdersRes.data : [];
 
-      console.log('📊 Sales data:', salesData.length);
-      console.log('📊 Purchases data:', purchasesData.length);
-      console.log('📊 Vouchers data:', vouchersData.length);
+      // ─── Map parties ───
+      const partyMap = {};
+      partiesData.forEach(p => { partyMap[p.id] = p.sub; });
 
-      // ─── Compute inventory using embedded details ───
+      // ─── Compute payments from JV vouchers ───
+      let totalReceived = 0;
+      let totalPaid = 0;
+      let cashDebit = 0;
+      let cashCredit = 0;
+      let bankDebit = 0;
+      let bankCredit = 0;
+
+      for (const voucher of vouchersData) {
+        const details = voucher.details || [];
+        for (const detail of details) {
+          const accountCode = detail.account_code;
+          const sub = partyMap[accountCode] || '';
+          const debit = parseFloat(detail.debit) || 0;
+          const credit = parseFloat(detail.credit) || 0;
+
+          // Payments received from customers: credits to debtor accounts (excluding Cash & Bank)
+          if (sub === 'debtor' && accountCode !== 5 && accountCode !== 6) {
+            totalReceived += credit;
+          }
+          // Payments made to suppliers: debits to creditor accounts
+          if (sub === 'creditor') {
+            totalPaid += debit;
+          }
+          // Cash balance: Cash account (id=5)
+          if (accountCode === 5) {
+            cashDebit += debit;
+            cashCredit += credit;
+          }
+          // Bank balance: Bank account (id=6)
+          if (accountCode === 6) {
+            bankDebit += debit;
+            bankCredit += credit;
+          }
+        }
+      }
+
+      const cashBal = cashDebit - cashCredit;
+      const bankBal = bankDebit - bankCredit;
+
+      setPayments({ received: totalReceived, paid: totalPaid });
+      setCashBalance(cashBal);
+      setBankBalance(bankBal);
+
+      // ─── Compute inventory ───
       const stockMap = new Map();
       for (const purchase of purchasesData) {
         const details = purchase.details || [];
@@ -214,7 +252,7 @@ const Dashboard = () => {
           entry.totalCost += (parseFloat(detail.qty) || 0) * (parseFloat(detail.rate) || 0);
         }
       }
-      // subtract sales
+      // subtract sales (completed only)
       for (const sale of salesData.filter(s => s.stts === 'C')) {
         const details = sale.details || [];
         for (const detail of details) {
@@ -231,38 +269,10 @@ const Dashboard = () => {
       }));
       setInventory(inventoryData);
 
-      // ─── Compute payments from JV vouchers ───
-      const partiesRes = await api.get('/accounting/parties/');
-      const parties = Array.isArray(partiesRes.data) ? partiesRes.data : [];
-      const partyMap = {};
-      parties.forEach(p => { partyMap[p.id] = p.sub; });
-
-      let totalPaidToSuppliers = 0;
-      let totalReceivedFromCustomers = 0;
-
-      for (const voucher of vouchersData) {
-        const details = voucher.details || [];
-        for (const detail of details) {
-          const accountCode = detail.account_code;
-          const debit = parseFloat(detail.debit) || 0;
-          const credit = parseFloat(detail.credit) || 0;
-          const sub = partyMap[accountCode] || '';
-          if (sub === 'creditor' && debit > 0) {
-            totalPaidToSuppliers += debit;
-          }
-          if (sub === 'debtor' && credit > 0) {
-            totalReceivedFromCustomers += credit;
-          }
-        }
-      }
-
-      setPayments({
-        received: totalReceivedFromCustomers,
-        paid: totalPaidToSuppliers,
-      });
-
       setSales(salesData);
       setPurchases(purchasesData);
+      setSaleOrders(saleOrdersData);
+      setPurchaseOrders(purchaseOrdersData);
     } catch (error) {
       console.error('❌ Error fetching dashboard data:', error);
       setFetchError(error.message || 'Failed to load dashboard data');
@@ -307,8 +317,20 @@ const Dashboard = () => {
     const total = (p.details || []).reduce((acc, d) => acc + (parseFloat(d.amount) || 0), 0);
     return sum + total - (parseFloat(p.discount) || 0);
   }, 0);
+  const monthlySales = sales.filter(s => s.stts === 'C' && s.vdate.startsWith(today.substring(0, 7)));
+  const monthlySalesAmount = monthlySales.reduce((sum, s) => {
+    const total = (s.details || []).reduce((acc, d) => acc + (parseFloat(d.amount) || 0), 0);
+    return sum + total - (parseFloat(s.discount) || 0);
+  }, 0);
+  const monthlyPurchases = purchases.filter(p => p.stts === 'C' && p.vdate.startsWith(today.substring(0, 7)));
+  const monthlyPurchasesAmount = monthlyPurchases.reduce((sum, p) => {
+    const total = (p.details || []).reduce((acc, d) => acc + (parseFloat(d.amount) || 0), 0);
+    return sum + total - (parseFloat(p.discount) || 0);
+  }, 0);
 
-  const pendingOrders = sales.filter(s => s.stts !== 'C').length;
+  const pendingSalesOrders = saleOrders.filter(so => so.stts === 'P').length;
+  const pendingPurchaseOrders = purchaseOrders.filter(po => po.stts === 'P').length;
+
   const overdueInvoices = sales.filter(s => {
     const dueDate = new Date(s.vdate);
     dueDate.setDate(dueDate.getDate() + 30);
@@ -318,9 +340,8 @@ const Dashboard = () => {
   const outstandingReceivables = Math.max(0, totalRevenue - payments.received);
   const outstandingPayables = Math.max(0, totalPurchasesValue - payments.paid);
   const netCashFlow = payments.received - payments.paid;
-  const cashBalance = netCashFlow + 50000;
-  const bankBalance = netCashFlow + 20000;
 
+  // Low stock: items with quantity < reorder level (if REORDER_LEVEL exists) or threshold 10
   const lowStockItems = inventory.filter(i => i.quantity < 10).length;
   const outOfStock = inventory.filter(i => i.quantity <= 0).length;
 
@@ -380,15 +401,6 @@ const Dashboard = () => {
     }));
   }, [revenueData]);
 
-  const expenseData = [
-    { name: 'Salaries', value: 40000 },
-    { name: 'Rent', value: 25000 },
-    { name: 'Utilities', value: 12000 },
-    { name: 'Transport', value: 8000 },
-    { name: 'Marketing', value: 15000 },
-    { name: 'Misc', value: 5000 },
-  ];
-
   const locationData = useMemo(() => {
     const locMap = new Map();
     inventory.forEach(item => {
@@ -430,20 +442,6 @@ const Dashboard = () => {
       .slice(0, 3)
       .map(([name, data]) => ({ name, ...data }));
   }, [purchases]);
-
-  const activities = [
-    { time: '10:35', title: 'Invoice #1005 created', description: 'Customer: Ahmad Traders, Amount: ₨ 12,000', icon: FileText },
-    { time: '10:22', title: 'Purchase #501 approved', description: 'Supplier: ABC Traders, Amount: ₨ 8,500', icon: Truck },
-    { time: '09:58', title: 'Inventory adjusted', description: 'Store 1: +50 units of Item X', icon: Package },
-    { time: '09:20', title: 'Payment received', description: 'From Ahmad Traders, ₨ 5,000', icon: CreditCard },
-  ];
-
-  const alerts = [
-    { severity: 'danger', message: `${overdueInvoices} invoices overdue`, icon: AlertTriangle },
-    { severity: 'warning', message: `${lowStockItems} products low stock`, icon: AlertCircle },
-    { severity: 'warning', message: `${pendingOrders} orders pending`, icon: Bell },
-    { severity: 'info', message: '1 backup not created', icon: AlertCircle },
-  ];
 
   const avgSale = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
   const avgPurchase = totalPurchasesCount > 0 ? totalPurchasesValue / totalPurchasesCount : 0;
@@ -491,7 +489,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ─── 24 KPI Cards ─── */}
+      {/* ─── KPI Cards ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <GradientKpiCard
           title="Revenue"
@@ -527,14 +525,12 @@ const Dashboard = () => {
           value={`₨ ${cashBalance.toFixed(0)}`}
           icon={Wallet}
           gradient={GRADIENTS.teal}
-          trend={15}
         />
         <GradientKpiCard
           title="Bank Balance"
           value={`₨ ${bankBalance.toFixed(0)}`}
           icon={Building}
           gradient={GRADIENTS.cyan}
-          trend={7}
         />
       </div>
 
@@ -547,14 +543,13 @@ const Dashboard = () => {
         />
         <GradientKpiCard
           title="Monthly Sales"
-          value={`₨ ${totalRevenue.toFixed(0)}`}
+          value={`₨ ${monthlySalesAmount.toFixed(0)}`}
           icon={BarChart3}
           gradient={GRADIENTS.blue}
-          trend={12}
         />
         <GradientKpiCard
-          title="Pending Orders"
-          value={pendingOrders}
+          title="Pending Sales Orders"
+          value={pendingSalesOrders}
           icon={Clock}
           gradient={GRADIENTS.yellow}
         />
@@ -574,8 +569,14 @@ const Dashboard = () => {
           gradient={GRADIENTS.orange}
         />
         <GradientKpiCard
+          title="Monthly Purchases"
+          value={`₨ ${monthlyPurchasesAmount.toFixed(0)}`}
+          icon={ShoppingCart}
+          gradient={GRADIENTS.pink}
+        />
+        <GradientKpiCard
           title="Pending Purchase Orders"
-          value={purchases.filter(p => p.stts !== 'C').length}
+          value={pendingPurchaseOrders}
           icon={FileText}
           gradient={GRADIENTS.pink}
         />
@@ -585,15 +586,15 @@ const Dashboard = () => {
           icon={Users}
           gradient={GRADIENTS.purple}
         />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <GradientKpiCard
           title="Inventory Value"
           value={`₨ ${totalStockValue.toFixed(0)}`}
           icon={Package}
           gradient={GRADIENTS.green}
         />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <GradientKpiCard
           title="Low Stock Items"
           value={lowStockItems}
@@ -612,15 +613,8 @@ const Dashboard = () => {
           icon={Layers}
           gradient={GRADIENTS.blue}
         />
-        <GradientKpiCard
-          title="Total Sales"
-          value={totalSalesCount}
-          icon={ShoppingCart}
-          gradient={GRADIENTS.teal}
-        />
       </div>
 
-      {/* Payment Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <GradientKpiCard
           title="Payments Received"
@@ -689,7 +683,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* ─── Sales vs Purchase + Expenses Breakdown ─── */}
+      {/* ─── Sales vs Purchase ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
           <CardHeader className="pb-2">
@@ -711,38 +705,8 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        {/* ─── Inventory by Location ─── */}
         <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-900">Expenses Breakdown</CardTitle>
-            <CardDescription className="text-xs text-gray-500">By category</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={expenseData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {expenseData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `₨ ${value}`} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ─── Inventory Widget ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-gray-900">Inventory by Location</CardTitle>
             <CardDescription className="text-xs text-gray-500">Current stock levels</CardDescription>
@@ -769,26 +733,6 @@ const Dashboard = () => {
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Alerts Panel */}
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <Bell className="h-4 w-4 text-yellow-500" />
-              Alerts
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {alerts.map((alert, idx) => (
-                <li key={idx} className={`flex items-start gap-2 p-2 rounded-lg ${alert.severity === 'danger' ? 'bg-red-50' : alert.severity === 'warning' ? 'bg-yellow-50' : 'bg-blue-50'}`}>
-                  <alert.icon className={`h-4 w-4 mt-0.5 ${alert.severity === 'danger' ? 'text-red-500' : alert.severity === 'warning' ? 'text-yellow-500' : 'text-blue-500'}`} />
-                  <span className="text-sm text-gray-700">{alert.message}</span>
-                </li>
-              ))}
-            </ul>
           </CardContent>
         </Card>
       </div>
@@ -838,20 +782,6 @@ const Dashboard = () => {
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ─── Recent Activities ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
-        <Card className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm overflow-hidden">
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold text-gray-900">Recent Activities</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activities.map((act, idx) => (
-              <ActivityItem key={idx} {...act} />
-            ))}
           </CardContent>
         </Card>
       </div>
