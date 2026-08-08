@@ -81,6 +81,9 @@ const Inventory = () => {
       const sales = salesRes.data || [];
       const items = itemsRes.data || [];
 
+      // Debug: log first item to see WEIGHT_KG
+      console.log('🔍 Items data (first item):', items[0]);
+
       const stockMap = new Map();
 
       // ─── 1. Add purchases ──────────────────────────────────────────────
@@ -98,12 +101,18 @@ const Inventory = () => {
 
           const qty = parseFloat(detail.qty) || 0;
           const rate = parseFloat(detail.rate) || 0;
-          // ✅ Fallback: if detail.weight_kg is missing, compute from item.WEIGHT_KG * qty
+
+          // ─── Weight fallback ────────────────────────────────────────────
           let weightKg = parseFloat(detail.weight_kg) || 0;
           let weightLbs = parseFloat(detail.weight_lbs) || 0;
+
+          // If detail has no weight, compute from item's WEIGHT_KG
           if (weightKg === 0 && item.WEIGHT_KG) {
-            weightKg = parseFloat(item.WEIGHT_KG) * qty;
-            weightLbs = weightKg * 2.2046;
+            const itemWeightKg = parseFloat(item.WEIGHT_KG) || 0;
+            if (itemWeightKg > 0) {
+              weightKg = itemWeightKg * qty;
+              weightLbs = weightKg * 2.2046;
+            }
           }
 
           if (!stockMap.has(key)) {
@@ -145,12 +154,16 @@ const Inventory = () => {
           const key = `${itemId}-${locationName}`;
 
           const qty = parseFloat(detail.qty) || 0;
-          // Fallback for sale weight
+
+          // Weight fallback for sales
           let weightKg = parseFloat(detail.weight_kg) || 0;
           let weightLbs = parseFloat(detail.weight_lbs) || 0;
           if (weightKg === 0 && item.WEIGHT_KG) {
-            weightKg = parseFloat(item.WEIGHT_KG) * qty;
-            weightLbs = weightKg * 2.2046;
+            const itemWeightKg = parseFloat(item.WEIGHT_KG) || 0;
+            if (itemWeightKg > 0) {
+              weightKg = itemWeightKg * qty;
+              weightLbs = weightKg * 2.2046;
+            }
           }
 
           if (!stockMap.has(key)) {
