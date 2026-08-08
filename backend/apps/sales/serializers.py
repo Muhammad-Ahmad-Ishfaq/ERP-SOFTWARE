@@ -90,7 +90,6 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
         if customer.sub != 'debtor':
             raise serializers.ValidationError({"account_code": "Selected account is not a debtor."})
 
-        # Get sale account from AC_SETUP
         setup = ACSetup.objects.first()
         if not setup:
             raise serializers.ValidationError({"sale_code": "AC_SETUP configuration not found."})
@@ -108,7 +107,6 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
 
         data['sale_code'] = sale_party
 
-        # Validate details
         details = data.get('details', [])
         if not details:
             raise serializers.ValidationError({"details": "At least one item is required."})
@@ -128,7 +126,6 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = Decimal(str(qty)) * Decimal(str(rate))
 
-            # Validate location (optional)
             loc = detail.get('location')
             if loc is not None and not isinstance(loc, (int, Location)):
                 try:
@@ -137,7 +134,6 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"details": f"Invalid location for row {row}."})
                 detail['location'] = loc
 
-            # weight_kg validation (optional)
             weight_kg = detail.get('weight_kg')
             if weight_kg is not None and Decimal(str(weight_kg)) < 0:
                 raise serializers.ValidationError({
