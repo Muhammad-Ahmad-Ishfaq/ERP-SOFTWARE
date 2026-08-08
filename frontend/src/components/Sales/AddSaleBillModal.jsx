@@ -1,6 +1,6 @@
 // src/components/Sales/AddSaleBillModal.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, ChevronDown, ChevronDownIcon } from 'lucide-react';
+import { X, Trash2, ChevronDown, ChevronDownIcon, FileText, Search, CheckCircle, Circle } from 'lucide-react';
 import { Combobox } from '@headlessui/react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
@@ -18,6 +18,15 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   const [nextVoucherNo, setNextVoucherNo] = useState(1);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // ── Drawer state ──
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [pendingSOs, setPendingSOs] = useState([]);
+  const [soLoading, setSoLoading] = useState(false);
+  const [soSearchTerm, setSoSearchTerm] = useState('');
+  const [selectedSOId, setSelectedSOId] = useState(null);
+  const [soCurrentPage, setSoCurrentPage] = useState(1);
+  const soItemsPerPage = 10;
 
   // ── Animation state ──
   const [isVisible, setIsVisible] = useState(false);
@@ -40,14 +49,14 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     vno: null,
     vdate: new Date().toISOString().split('T')[0],
     dc_no: '',
-    account_code: '', // ✅ customer (debtor)
+    account_code: '', // customer (debtor)
     remarks: '',
     discount: 0,
     stts: 'P',
     user_no: '',
   });
 
-  // ── Dynamic detail rows ──
+  // ── Dynamic detail rows with weight fields ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -55,7 +64,10 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     qty: 0,
     rate: 0,
     amount: 0,
-    location: null,   // ← new
+    location: null,
+    weight_per_unit: 0,
+    weight_kg: 0,
+    weight_lbs: 0,
   });
 
   const [details, setDetails] = useState(
@@ -68,13 +80,13 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   const [customers, setCustomers] = useState([]);
   const [items, setItems] = useState([]);
   const [units, setUnits] = useState([]);
-  const [locations, setLocations] = useState([]);   // ← new
+  const [locations, setLocations] = useState([]);
 
   // ── Combobox queries ──
   const [customerQuery, setCustomerQuery] = useState('');
   const [itemQueries, setItemQueries] = useState({});
   const [uomQueries, setUomQueries] = useState({});
-  const [locationQueries, setLocationQueries] = useState({});   // ← new
+  const [locationQueries, setLocationQueries] = useState({});
 
   // ── Get logged-in user ID ──
   const getCurrentUserId = () => {
@@ -118,7 +130,7 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
         api.get('/accounting/parties/?sub=debtor'),
         api.get('/inventory/items/'),
         api.get('/inventory/units/'),
-        api.get('/locations/locations/'),   // ← fetch locations
+        api.get('/locations/locations/'),
       ]);
       setCustomers(customersRes.data || []);
       setItems(itemsRes.data || []);
@@ -129,14 +141,32 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     }
   };
 
+  // ── Fetch pending sale orders ──
+  const fetchPendingSOs = async () => {
+    setSoLoading(true);
+    try {
+      const res = await api.get('/sale-orders/sale-orders/');
+      const pending = (res.data || []).filter(so => so.stts === 'P');
+      setPendingSOs(pending);
+    } catch (error) {
+      console.error('Error fetching pending sale orders:', error);
+      toast.error('Failed to load sale orders');
+    } finally {
+      setSoLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (open) {
       const userId = getCurrentUserId();
       setMaster(prev => ({ ...prev, user_no: userId }));
       fetchDropdowns();
       fetchNextVoucherNo();
+      if (isDrawerOpen) {
+        fetchPendingSOs();
+      }
     }
-  }, [open]);
+  }, [open, isDrawerOpen]);
 
   // ── Load edit data ──
   useEffect(() => {
@@ -162,6 +192,9 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
         rate: d.rate || 0,
         amount: d.amount || 0,
         location: d.location || null,
+        weight_per_unit: d.weight_per_unit || 0,
+        weight_kg: d.weight_kg || 0,
+        weight_lbs: d.weight_lbs || 0,
       }));
       while (newDetails.length < 8) {
         newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -184,8 +217,68 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
       setItemQueries({});
       setUomQueries({});
       setLocationQueries({});
+      setSelectedSOId(null);
     }
   }, [editingSaleBill, open, nextVoucherNo]);
+
+  // ── Load SO data into bill ──
+  const loadSOData = (so) => {
+    setMaster(prev => ({
+      ...prev,
+      account_code: so.customer || '',
+      remarks: so.remarks || '',
+      stts: 'P', // bill starts as pending, user can change
+      vdate: new Date().toISOString().split('T')[0],
+      user_no: getCurrentUserId(),
+    }));
+
+    const soDetails = so.details || [];
+    const newDetails = soDetails.map((d, i) => ({
+      vsn: d.vsn || i + 1,
+      item_code: d.item_code || '',
+      uom: d.uom || '',
+      qty: d.qty || 0,
+      rate: d.rate || 0,
+      amount: d.amount || 0,
+      location: d.location || null,
+      weight_per_unit: d.weight_per_unit || 0,
+      weight_kg: d.weight_kg || 0,
+      weight_lbs: d.weight_lbs || 0,
+    }));
+    while (newDetails.length < 8) {
+      newDetails.push(createEmptyRow(newDetails.length + 1));
+    }
+    setDetails(newDetails);
+
+    const queries = {};
+    const uomQueriesObj = {};
+    const locQueries = {};
+    soDetails.forEach((d, idx) => {
+      if (d.item_code) queries[idx] = d.item_code;
+      if (d.uom) uomQueriesObj[idx] = d.uom;
+      if (d.location) locQueries[idx] = d.location;
+    });
+    setItemQueries(queries);
+    setUomQueries(uomQueriesObj);
+    setLocationQueries(locQueries);
+
+    setSelectedSOId(so.id);
+    setIsDrawerOpen(false);
+    toast.success(`Sale Order #${so.vno} loaded`);
+  };
+
+  // ── Recalculate weight and amount ──
+  const recalcRow = (row) => {
+    const qty = parseFloat(row.qty) || 0;
+    const weightPerUnit = parseFloat(row.weight_per_unit) || 0;
+    const rate = parseFloat(row.rate) || 0;
+
+    const weightKg = qty * weightPerUnit;
+    const weightLbs = weightKg * 2.2046;
+    const amount = weightLbs * rate;
+
+    return { ...row, weight_kg: weightKg, weight_lbs: weightLbs, amount };
+  };
 
   // ── Handlers ──
   const handleMasterChange = (field, value) => {
@@ -194,12 +287,12 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
 
   const handleDetailChange = (index, field, value) => {
     const newDetails = [...details];
-    const updated = { ...newDetails[index], [field]: value };
-    if (field === 'qty' || field === 'rate') {
-      const qty = parseFloat(updated.qty) || 0;
-      const rate = parseFloat(updated.rate) || 0;
-      updated.amount = qty * rate;
+    let updated = { ...newDetails[index], [field]: value };
+
+    if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
+      updated = recalcRow(updated);
     }
+
     newDetails[index] = updated;
     setDetails(newDetails);
 
@@ -239,6 +332,12 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
   const getItemName = (id) => {
     const item = items.find(i => i.ITEM_ID === parseInt(id));
     return item ? item.ITEM_NAME : '';
+  };
+
+  // ── Get item weight from items list ──
+  const getItemWeight = (id) => {
+    const item = items.find(i => i.ITEM_ID === parseInt(id));
+    return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
   };
 
   // ── Filter functions ──
@@ -322,9 +421,16 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
           qty: parseFloat(d.qty),
           rate: parseFloat(d.rate),
           amount: parseFloat(d.amount),
-          location: d.location || null,   // ← send location
+          location: d.location || null,
+          weight_per_unit: parseFloat(d.weight_per_unit) || 0,
+          weight_kg: parseFloat(d.weight_kg) || 0,
+          weight_lbs: parseFloat(d.weight_lbs) || 0,
         })),
       };
+      // If we loaded from a sale order, send its ID so backend can update status
+      if (selectedSOId) {
+        payload.sale_order_id = selectedSOId;
+      }
       const url = editingSaleBill
         ? `/sales/sale-master/${editingSaleBill.id}/`
         : '/sales/sale-master/';
@@ -360,465 +466,614 @@ const AddSaleBillModal = ({ open, onOpenChange, editingSaleBill, onSave }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ── Filtered SOs and pagination ──
+  const filteredSOs = pendingSOs.filter(so => {
+    const term = soSearchTerm.toLowerCase();
+    return (
+      so.vno?.toString().includes(term) ||
+      so.customer_name?.toLowerCase().includes(term) ||
+      so.vtype?.toLowerCase().includes(term)
+    );
+  });
+
+  const soTotalItems = filteredSOs.length;
+  const soStart = soTotalItems === 0 ? 0 : (soCurrentPage - 1) * soItemsPerPage + 1;
+  const soEnd = Math.min(soCurrentPage * soItemsPerPage, soTotalItems);
+  const soPaginated = filteredSOs.slice((soCurrentPage - 1) * soItemsPerPage, soCurrentPage * soItemsPerPage);
+
+  useEffect(() => {
+    setSoCurrentPage(1);
+  }, [soSearchTerm]);
+
+  const formatAmount = (value) => {
+    const num = parseFloat(value);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
   if (!open) return null;
 
   return (
-    <div
-      className={`
-        fixed inset-0 z-50
-        flex items-start justify-center
-        overflow-hidden
-        bg-black/50
-        backdrop-blur-sm
-        transition-opacity
-        duration-300
-        ease-out
-        ${isVisible ? "opacity-100" : "opacity-0"}
-      `}
-    >
+    <>
+      {/* ─── MAIN MODAL ─── */}
       <div
         className={`
-          w-full
-          h-full
-          max-h-screen
-          bg-white
-          shadow-2xl
-          flex flex-col
-          transform
-          transition-transform
-          duration-500
+          fixed inset-0 z-50
+          flex items-start justify-center
+          overflow-hidden
+          bg-black/50
+          backdrop-blur-sm
+          transition-opacity
+          duration-300
           ease-out
-          ${isVisible ? "translate-y-0" : "-translate-y-full"}
+          ${isVisible ? "opacity-100" : "opacity-0"}
         `}
       >
-        {/* Header */}
-        <div className="flex-shrink-0 sticky top-0 bg-gray-200 px-4 py-1.5 flex justify-between items-center z-10">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {editingSaleBill ? 'Edit Sale Bill' : 'Sale Bill'}
-            </h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => onOpenChange(false)} className="text-gray-400 hover:text-gray-900">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-2">
-            {/* Row 1: Voucher No, Date, DC No */}
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center justify-center gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-1">
-                    Bill No <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={nextVoucherNo || ''}
-                    readOnly
-                    className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 opacity-70 cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-green-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-1">
-                    Bill Date <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={master.vdate}
-                    onChange={(e) => handleMasterChange('vdate', e.target.value)}
-                    className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 focus:outline-none focus:ring-1 focus:ring-green-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-1">
-                    D/C No
-                  </label>
-                  <input
-                    type="text"
-                    value={master.dc_no || ''}
-                    onChange={(e) => handleMasterChange('dc_no', e.target.value)}
-                    className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 focus:outline-none focus:ring-1 focus:ring-green-500"
-                    placeholder="DC Number"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1">Status</label>
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                    className="w-[160px] bg-white border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 flex items-center justify-between focus:outline-none focus:ring-1 focus:ring-green-500"
-                  >
-                    <span className={getStatusColor(master.stts)}>
-                      {getStatusLabel(master.stts)}
-                    </span>
-                    <ChevronDown
-                      size={16}
-                      className={`text-gray-400 transition-transform ${
-                        statusDropdownOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {statusDropdownOpen && (
-                    <div className="absolute top-full mt-1 left-0 w-[160px] bg-white border border-gray-300 rounded-xs shadow-lg z-50 overflow-hidden">
-                      {statusOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            handleMasterChange("stts", option.value);
-                            setStatusDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-200 transition-colors flex items-center gap-2 ${
-                            master.stts === option.value ? "bg-gray-200" : ""
-                          }`}
-                        >
-                          <span className={`${option.color} font-semibold`}>●</span>
-                          <span className="text-gray-900">{option.label}</span>
-                          {master.stts === option.value && (
-                            <span className="ml-auto text-green-500">✓</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+        <div
+          className={`
+            w-full
+            h-full
+            max-h-screen
+            bg-white
+            shadow-2xl
+            flex flex-col
+            transform
+            transition-transform
+            duration-500
+            ease-out
+            ${isVisible ? "translate-y-0" : "-translate-y-full"}
+          `}
+        >
+          {/* Header */}
+          <div className="flex-shrink-0 sticky top-0 bg-gray-200 px-4 py-1.5 flex justify-between items-center z-10">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {editingSaleBill ? 'Edit Sale Bill' : 'Sale Bill'}
+              </h2>
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setIsDrawerOpen(true);
+                  fetchPendingSOs();
+                }}
+                className="text-gray-500 hover:text-gray-700 p-1.5 rounded-md hover:bg-gray-300 transition-colors cursor-pointer"
+                title="Load from Sale Order"
+                type="button"
+              >
+                <FileText size={18} />
+              </button>
+              <button onClick={() => onOpenChange(false)} className="text-gray-400 hover:text-gray-900">
+                <X size={20} />
+              </button>
+            </div>
+          </div>
 
-            {/* Row 2: Customer */}
-            <div className="grid grid-cols-5 gap-4 mb-3">
-              <div className="col-span-5">
-                <label className="block text-sm font-medium text-gray-900 mb-1">
-                  Customer <span className="text-red-400">*</span>
-                </label>
-                <Combobox
-                  value={master.account_code}
-                  onChange={(val) => handleMasterChange('account_code', val)}
-                >
-                  <div className="relative">
-                    <Combobox.Input
-                      className="w-full bg-gray-100 border border-gray-300 rounded-xs px-2 py-1 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                      onChange={(e) => setCustomerQuery(e.target.value)}
-                      displayValue={(id) => getCustomerDisplay(id)}
-                      placeholder="Search customer..."
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-2">
+              {/* Row 1: Bill No, Date, DC No */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-center gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
+                      Bill No <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={nextVoucherNo || ''}
+                      readOnly
+                      className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 opacity-70 cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-green-500"
                     />
-                    <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                      <ChevronDownIcon size={16} className="text-gray-900" />
-                    </Combobox.Button>
-                    <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
-                      {getFilteredCustomers(customerQuery).length === 0 ? (
-                        <div className="p-2 text-gray-400 text-sm">No customers found</div>
-                      ) : (
-                        getFilteredCustomers(customerQuery).map((customer) => (
-                          <Combobox.Option
-                            key={customer.id}
-                            value={customer.id}
-                            className={({ active }) =>
-                              `px-3 py-2 cursor-pointer ${active ? 'bg-gray-200 text-gray-900' : 'text-gray-900'}`
-                            }
-                          >
-                            <div className="text-sm">
-                              <div className="font-medium">{customer.name}</div>
-                              <div className="text-xs text-gray-400">Code: {customer.code}</div>
-                            </div>
-                          </Combobox.Option>
-                        ))
-                      )}
-                    </Combobox.Options>
                   </div>
-                </Combobox>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
+                      Bill Date <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={master.vdate}
+                      onChange={(e) => handleMasterChange('vdate', e.target.value)}
+                      className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 focus:outline-none focus:ring-1 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">
+                      D/C No
+                    </label>
+                    <input
+                      type="text"
+                      value={master.dc_no || ''}
+                      onChange={(e) => handleMasterChange('dc_no', e.target.value)}
+                      className="w-[180px] bg-gray-100 border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 focus:outline-none focus:ring-1 focus:ring-green-500"
+                      placeholder="DC Number"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-1">Status</label>
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+                      className="w-[160px] bg-white border border-gray-300 rounded-xs text-sm px-3 py-1 text-gray-900 flex items-center justify-between focus:outline-none focus:ring-1 focus:ring-green-500"
+                    >
+                      <span className={getStatusColor(master.stts)}>
+                        {getStatusLabel(master.stts)}
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-400 transition-transform ${
+                          statusDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    {statusDropdownOpen && (
+                      <div className="absolute top-full mt-1 left-0 w-[160px] bg-white border border-gray-300 rounded-xs shadow-lg z-50 overflow-hidden">
+                        {statusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              handleMasterChange("stts", option.value);
+                              setStatusDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-200 transition-colors flex items-center gap-2 ${
+                              master.stts === option.value ? "bg-gray-200" : ""
+                            }`}
+                          >
+                            <span className={`${option.color} font-semibold`}>●</span>
+                            <span className="text-gray-900">{option.label}</span>
+                            {master.stts === option.value && (
+                              <span className="ml-auto text-green-500">✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Customer */}
+              <div className="grid grid-cols-5 gap-4 mb-3">
+                <div className="col-span-5">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Customer <span className="text-red-400">*</span>
+                  </label>
+                  <Combobox
+                    value={master.account_code}
+                    onChange={(val) => handleMasterChange('account_code', val)}
+                  >
+                    <div className="relative">
+                      <Combobox.Input
+                        className="w-full bg-gray-100 border border-gray-300 rounded-xs px-2 py-1 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                        onChange={(e) => setCustomerQuery(e.target.value)}
+                        displayValue={(id) => getCustomerDisplay(id)}
+                        placeholder="Search customer..."
+                      />
+                      <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                        <ChevronDownIcon size={16} className="text-gray-900" />
+                      </Combobox.Button>
+                      <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
+                        {getFilteredCustomers(customerQuery).length === 0 ? (
+                          <div className="p-2 text-gray-400 text-sm">No customers found</div>
+                        ) : (
+                          getFilteredCustomers(customerQuery).map((customer) => (
+                            <Combobox.Option
+                              key={customer.id}
+                              value={customer.id}
+                              className={({ active }) =>
+                                `px-3 py-2 cursor-pointer ${active ? 'bg-gray-200 text-gray-900' : 'text-gray-900'}`
+                              }
+                            >
+                              <div className="text-sm">
+                                <div className="font-medium">{customer.name}</div>
+                                <div className="text-xs text-gray-400">Code: {customer.code}</div>
+                              </div>
+                            </Combobox.Option>
+                          ))
+                        )}
+                      </Combobox.Options>
+                    </div>
+                  </Combobox>
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-900 mb-1">Remarks</label>
+                <textarea
+                  rows={2}
+                  value={master.remarks || ''}
+                  onChange={(e) => handleMasterChange('remarks', e.target.value)}
+                  placeholder="Additional remarks"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-xs text-sm px-2 py-1 text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-green-500"
+                />
+              </div>
+
+              {/* Discount */}
+              <div className="grid grid-cols-5 gap-4 mb-3">
+                <div className="col-span-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">Discount %</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={master.discount || 0}
+                    onChange={(e) => handleMasterChange('discount', parseFloat(e.target.value) || 0)}
+                    className="w-full bg-gray-100 border border-gray-300 rounded-xs text-sm px-2 py-1 text-gray-900 text-right focus:outline-none focus:ring-1 focus:ring-green-500"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="overflow-hidden">
+                <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
+                  <h3 className="text-md font-semibold text-gray-900">Items</h3>
+                  <span className="text-xs text-gray-400">
+                    {details.filter(d => d.item_code && d.qty > 0).length} rows filled
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-200 text-gray-300">
+                      <tr>
+                        <th className="text-gray-900 text-left px-3 py-1 border-r border-gray-400 w-12">#</th>
+                        <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-48">Item Code</th>
+                        <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
+                        <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">UOM</th>
+                        <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
+                        <th className="text-center text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight/Unit (kg)</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {details.map((row, index) => {
+                        const rowAmount = row.amount || 0;
+                        const isFilled = isRowFilled(row);
+                        return (
+                          <tr
+                            key={index}
+                            className={`border-t border-gray-300 hover:bg-gray-100 ${
+                              isFilled ? 'bg-green-50/30' : ''
+                            } cursor-pointer`}
+                          >
+                            <td className="px-3 py-1 border-r border-b border-gray-300 text-center">
+                              {String(index + 1).padStart(2, '0')}
+                            </td>
+                            <td className="border-r border-b border-gray-300 p-0">
+                              <Combobox
+                                value={row.item_code}
+                                onChange={(val) => {
+                                  handleDetailChange(index, 'item_code', val);
+                                  const weight = getItemWeight(val);
+                                  handleDetailChange(index, 'weight_per_unit', weight);
+                                }}
+                              >
+                                <div className="relative">
+                                  <Combobox.Input
+                                    className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setItemQueries(prev => ({ ...prev, [index]: val }));
+                                    }}
+                                    displayValue={(code) => getItemDisplay(code)}
+                                    placeholder="Search item..."
+                                  />
+                                  <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                    <ChevronDownIcon size={16} className="text-gray-900" />
+                                  </Combobox.Button>
+                                  <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
+                                    {getFilteredItems(itemQueries[index] || '').length === 0 ? (
+                                      <div className="p-2 text-gray-400 text-sm">No items found</div>
+                                    ) : (
+                                      getFilteredItems(itemQueries[index] || '').map((item) => (
+                                        <Combobox.Option
+                                          key={item.ITEM_ID}
+                                          value={item.ITEM_ID}
+                                          className={({ active }) =>
+                                            `px-3 py-2 cursor-pointer ${active ? 'bg-gray-200 text-gray-900' : 'text-gray-900'}`
+                                          }
+                                        >
+                                          <div className="text-sm">
+                                            <div className="font-medium">{item.ITEM_CODE}</div>
+                                            <div className="text-xs text-gray-400">{item.ITEM_NAME}</div>
+                                          </div>
+                                        </Combobox.Option>
+                                      ))
+                                    )}
+                                  </Combobox.Options>
+                                </div>
+                              </Combobox>
+                            </td>
+                            <td className="border-r border-b border-gray-300">
+                              <input
+                                type="text"
+                                value={getItemName(row.item_code)}
+                                readOnly
+                                className="w-full bg-gray-100 rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none"
+                                placeholder="Material Description"
+                              />
+                            </td>
+                            <td className="border-r border-b border-gray-300 p-0">
+                              <Combobox
+                                value={row.uom}
+                                onChange={(val) => handleDetailChange(index, 'uom', val)}
+                              >
+                                <div className="relative">
+                                  <Combobox.Input
+                                    className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setUomQueries(prev => ({ ...prev, [index]: val }));
+                                    }}
+                                    displayValue={(id) => getUomDisplay(id)}
+                                    placeholder="UOM"
+                                  />
+                                  <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                    <ChevronDownIcon size={16} className="text-gray-900" />
+                                  </Combobox.Button>
+                                  <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
+                                    {getFilteredUnits(uomQueries[index] || '').length === 0 ? (
+                                      <div className="p-2 text-gray-400 text-sm">No units found</div>
+                                    ) : (
+                                      getFilteredUnits(uomQueries[index] || '').map((unit) => (
+                                        <Combobox.Option
+                                          key={unit.UOM_ID}
+                                          value={unit.UOM_ID}
+                                          className={({ active }) =>
+                                            `px-3 py-2 cursor-pointer ${active ? 'bg-gray-100 text-gray-900' : 'text-gray-900'}`
+                                          }
+                                        >
+                                          <div className="text-sm">
+                                            <div className="font-medium">{unit.UOM_NAME}</div>
+                                            <div className="text-xs text-gray-400">{unit.SHORT_NAME}</div>
+                                          </div>
+                                        </Combobox.Option>
+                                      ))
+                                    )}
+                                  </Combobox.Options>
+                                </div>
+                              </Combobox>
+                            </td>
+                            {/* ─── Location Column ─── */}
+                            <td className="border-r border-b border-gray-300 p-0">
+                              <Combobox
+                                value={row.location}
+                                onChange={(val) => handleDetailChange(index, 'location', val)}
+                              >
+                                <div className="relative">
+                                  <Combobox.Input
+                                    className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setLocationQueries(prev => ({ ...prev, [index]: val }));
+                                    }}
+                                    displayValue={(id) => getLocationDisplay(id)}
+                                    placeholder="Location"
+                                  />
+                                  <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                    <ChevronDownIcon size={16} className="text-gray-900" />
+                                  </Combobox.Button>
+                                  <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
+                                    {getFilteredLocations(locationQueries[index] || '').length === 0 ? (
+                                      <div className="p-2 text-gray-400 text-sm">No locations found</div>
+                                    ) : (
+                                      getFilteredLocations(locationQueries[index] || '').map((loc) => (
+                                        <Combobox.Option
+                                          key={loc.id}
+                                          value={loc.id}
+                                          className={({ active }) =>
+                                            `px-3 py-2 cursor-pointer ${active ? 'bg-gray-200 text-gray-900' : 'text-gray-900'}`
+                                          }
+                                        >
+                                          <div className="text-sm">
+                                            <div className="font-medium">{loc.code}</div>
+                                            <div className="text-xs text-gray-400">{loc.name}</div>
+                                          </div>
+                                        </Combobox.Option>
+                                      ))
+                                    )}
+                                  </Combobox.Options>
+                                </div>
+                              </Combobox>
+                            </td>
+                            <td className="border-r border-b border-gray-300">
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={row.qty || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'qty', val);
+                                }}
+                                className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="border-r border-b border-gray-300">
+                              <input
+                                type="number"
+                                step="0.0001"
+                                value={row.rate || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'rate', val);
+                                }}
+                                className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
+                                placeholder="0.0000"
+                              />
+                            </td>
+                            <td className="border-r border-b border-gray-300 p-0">
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={row.weight_per_unit || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'weight_per_unit', val);
+                                }}
+                                className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-500"
+                                placeholder="0.000"
+                              />
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                              {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                              {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-bold text-red-600 px-3 py-1.5">
+                              {formatAmount(rowAmount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-200">
+                      <tr className="border-t border-gray-300">
+                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">
+                          Total Amount:
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold text-red-600 text-base">
+                          {formatAmount(calculateTotal())}
+                        </td>
+                      </tr>
+                      <tr className="border-t border-gray-300">
+                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">
+                          Discount ({master.discount || 0}%):
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium text-red-500 text-base">
+                          - {formatAmount((calculateTotal() * (master.discount || 0)) / 100)}
+                        </td>
+                      </tr>
+                      <tr className="border-t-2 border-gray-300">
+                        <td colSpan="10" className="px-3 py-3 text-right font-bold text-gray-900">
+                          Grand Total:
+                        </td>
+                        <td className="px-3 py-3 text-right font-bold text-green-600 text-base">
+                          ₨ {formatAmount(calculateTotal() - (calculateTotal() * (master.discount || 0)) / 100)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
 
-            {/* Row 3: Remarks */}
-            <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-900 mb-1">Remarks</label>
-              <textarea
-                rows={2}
-                value={master.remarks || ''}
-                onChange={(e) => handleMasterChange('remarks', e.target.value)}
-                placeholder="Additional remarks"
-                className="w-full bg-gray-100 border border-gray-300 rounded-xs text-sm px-2 py-1 text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-green-500"
-              />
+            {/* Footer */}
+            <div className="flex-shrink-0 bg-gray-200 border-t border-gray-300 px-8 py-1.5 flex justify-between items-center">
+              <div className="text-green-600 text-xl font-bold">
+                Grand Total: ₨ {formatAmount(calculateTotal() - (calculateTotal() * (master.discount || 0)) / 100)}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="px-6 py-1 bg-gray-200 hover:bg-gray-300 border border-gray-400 rounded-xs text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-8 py-1 bg-green-600 hover:bg-green-700 text-white rounded-xs text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : editingSaleBill ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* ─── RIGHT DRAWER ─── */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-[100] flex justify-end pointer-events-auto">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setIsDrawerOpen(false)} />
+          <div className="relative w-[450px] h-full bg-white border-l border-gray-300 shadow-2xl overflow-hidden flex flex-col">
+            <div className="bg-gray-200 px-4 py-3 flex justify-between items-center border-b border-gray-300">
+              <h3 className="text-lg font-semibold text-gray-900">Pending Sale Orders</h3>
+              <button onClick={() => setIsDrawerOpen(false)} className="text-gray-400 hover:text-gray-900" type="button">
+                <X size={20} />
+              </button>
             </div>
 
-            {/* Discount */}
-            <div className="grid grid-cols-5 gap-4 mb-3">
-              <div className="col-span-1">
-                <label className="block text-sm font-medium text-gray-900 mb-1">Discount %</label>
+            <div className="px-4 py-2 border-b border-gray-300">
+              <div className="flex items-center bg-gray-100 border border-gray-300 rounded-xs h-9">
+                <div className="px-3 text-gray-400"><Search size={16} /></div>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={master.discount || 0}
-                  onChange={(e) => handleMasterChange('discount', parseFloat(e.target.value) || 0)}
-                  className="w-full bg-gray-100 border border-gray-300 rounded-xs text-sm px-2 py-1 text-gray-900 text-right focus:outline-none focus:ring-1 focus:ring-green-500"
-                  placeholder="0"
+                  type="text"
+                  placeholder="Search SO no, customer..."
+                  value={soSearchTerm}
+                  onChange={(e) => setSoSearchTerm(e.target.value)}
+                  className="bg-transparent outline-none px-2 h-8 text-sm w-full placeholder:text-gray-400 text-gray-900"
                 />
               </div>
             </div>
 
-            {/* Items Table */}
-            <div className="overflow-hidden">
-              <div className="px-4 py-1 border-b border-gray-300 flex justify-between items-center">
-                <h3 className="text-md font-semibold text-gray-900">Items</h3>
-                <span className="text-xs text-gray-400">
-                  {details.filter(d => d.item_code && d.qty > 0).length} rows filled
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-200 text-gray-300">
-                    <tr>
-                      <th className="text-gray-900 text-left px-3 py-1 border-r border-gray-400 w-12">#</th>
-                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-48">Item Code</th>
-                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
-                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">UOM</th>
-                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th> {/* NEW */}
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {details.map((row, index) => {
-                      const rowAmount = row.amount || 0;
-                      const isFilled = isRowFilled(row);
-                      return (
-                        <tr
-                          key={index}
-                          className={`border-t border-gray-300 hover:bg-gray-100 ${
-                            isFilled ? 'bg-green-50/30' : ''
-                          } cursor-pointer`}
-                        >
-                          <td className="px-3 py-1 border-r border-b border-gray-300 text-center">
-                            {String(index + 1).padStart(2, '0')}
-                          </td>
-                          <td className="border-r border-b border-gray-300 p-0">
-                            <Combobox
-                              value={row.item_code}
-                              onChange={(val) => handleDetailChange(index, 'item_code', val)}
-                            >
-                              <div className="relative">
-                                <Combobox.Input
-                                  className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setItemQueries(prev => ({ ...prev, [index]: val }));
-                                  }}
-                                  displayValue={(code) => getItemDisplay(code)}
-                                  placeholder="Search item..."
-                                />
-                                <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                  <ChevronDownIcon size={16} className="text-gray-900" />
-                                </Combobox.Button>
-                                <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
-                                  {getFilteredItems(itemQueries[index] || '').length === 0 ? (
-                                    <div className="p-2 text-gray-400 text-sm">No items found</div>
-                                  ) : (
-                                    getFilteredItems(itemQueries[index] || '').map((item) => (
-                                      <Combobox.Option
-                                        key={item.ITEM_ID}
-                                        value={item.ITEM_ID}
-                                        className={({ active }) =>
-                                          `px-3 py-2 cursor-pointer ${active ? 'bg-gray-200 text-gray-900' : 'text-gray-900'}`
-                                        }
-                                      >
-                                        <div className="text-sm">
-                                          <div className="font-medium">{item.ITEM_CODE}</div>
-                                          <div className="text-xs text-gray-400">{item.ITEM_NAME}</div>
-                                        </div>
-                                      </Combobox.Option>
-                                    ))
-                                  )}
-                                </Combobox.Options>
-                              </div>
-                            </Combobox>
-                          </td>
-                          <td className="border-r border-b border-gray-300">
-                            <input
-                              type="text"
-                              value={getItemName(row.item_code)}
-                              readOnly
-                              className="w-full bg-gray-100 rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none"
-                              placeholder="Material Description"
-                            />
-                          </td>
-                          <td className="border-r border-b border-gray-300 p-0">
-                            <Combobox
-                              value={row.uom}
-                              onChange={(val) => handleDetailChange(index, 'uom', val)}
-                            >
-                              <div className="relative">
-                                <Combobox.Input
-                                  className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setUomQueries(prev => ({ ...prev, [index]: val }));
-                                  }}
-                                  displayValue={(id) => getUomDisplay(id)}
-                                  placeholder="UOM"
-                                />
-                                <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                  <ChevronDownIcon size={16} className="text-gray-900" />
-                                </Combobox.Button>
-                                <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
-                                  {getFilteredUnits(uomQueries[index] || '').length === 0 ? (
-                                    <div className="p-2 text-gray-400 text-sm">No units found</div>
-                                  ) : (
-                                    getFilteredUnits(uomQueries[index] || '').map((unit) => (
-                                      <Combobox.Option
-                                        key={unit.UOM_ID}
-                                        value={unit.UOM_ID}
-                                        className={({ active }) =>
-                                          `px-3 py-2 cursor-pointer ${active ? 'bg-gray-100 text-gray-900' : 'text-gray-900'}`
-                                        }
-                                      >
-                                        <div className="text-sm">
-                                          <div className="font-medium">{unit.UOM_NAME}</div>
-                                          <div className="text-xs text-gray-400">{unit.SHORT_NAME}</div>
-                                        </div>
-                                      </Combobox.Option>
-                                    ))
-                                  )}
-                                </Combobox.Options>
-                              </div>
-                            </Combobox>
-                          </td>
-                          {/* ─── Location Column ─── */}
-                          <td className="border-r border-b border-gray-300 p-0">
-                            <Combobox
-                              value={row.location}
-                              onChange={(val) => handleDetailChange(index, 'location', val)}
-                            >
-                              <div className="relative">
-                                <Combobox.Input
-                                  className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setLocationQueries(prev => ({ ...prev, [index]: val }));
-                                  }}
-                                  displayValue={(id) => getLocationDisplay(id)}
-                                  placeholder="Location"
-                                />
-                                <Combobox.Button className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                  <ChevronDownIcon size={16} className="text-gray-900" />
-                                </Combobox.Button>
-                                <Combobox.Options className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-xs shadow-lg max-h-60 overflow-auto">
-                                  {getFilteredLocations(locationQueries[index] || '').length === 0 ? (
-                                    <div className="p-2 text-gray-400 text-sm">No locations found</div>
-                                  ) : (
-                                    getFilteredLocations(locationQueries[index] || '').map((loc) => (
-                                      <Combobox.Option
-                                        key={loc.id}
-                                        value={loc.id}
-                                        className={({ active }) =>
-                                          `px-3 py-2 cursor-pointer ${active ? 'bg-gray-200 text-gray-900' : 'text-gray-900'}`
-                                        }
-                                      >
-                                        <div className="text-sm">
-                                          <div className="font-medium">{loc.code}</div>
-                                          <div className="text-xs text-gray-400">{loc.name}</div>
-                                        </div>
-                                      </Combobox.Option>
-                                    ))
-                                  )}
-                                </Combobox.Options>
-                              </div>
-                            </Combobox>
-                          </td>
-                          <td className="border-r border-b border-gray-300">
-                            <input
-                              type="number"
-                              step="0.001"
-                              value={row.qty || ''}
-                              onChange={(e) =>
-                                handleDetailChange(index, 'qty', parseFloat(e.target.value) || 0)
-                              }
-                              className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
-                              placeholder="0"
-                            />
-                          </td>
-                          <td className="border-r border-b border-gray-300">
-                            <input
-                              type="number"
-                              step="0.0001"
-                              value={row.rate || ''}
-                              onChange={(e) =>
-                                handleDetailChange(index, 'rate', parseFloat(e.target.value) || 0)
-                              }
-                              className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
-                              placeholder="0.0000"
-                            />
-                          </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-red-500 px-3 py-1.5">
-                            {rowAmount.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="bg-gray-200">
-                    <tr className="border-t border-gray-300">
-                      <td colSpan="7" className="px-3 py-2 text-right font-semibold text-gray-900">
-                        Total Amount:
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-red-600 text-base">
-                        {calculateTotal().toFixed(2)}
-                      </td>
-                    </tr>
-                    <tr className="border-t border-gray-300">
-                      <td colSpan="7" className="px-3 py-2 text-right font-semibold text-gray-900">
-                        Discount ({master.discount || 0}%):
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium text-red-500 text-base">
-                        - {((calculateTotal() * (master.discount || 0)) / 100).toFixed(2)}
-                      </td>
-                    </tr>
-                    <tr className="border-t-2 border-gray-300">
-                      <td colSpan="7" className="px-3 py-3 text-right font-bold text-gray-900">
-                        Grand Total:
-                      </td>
-                      <td className="px-3 py-3 text-right font-bold text-green-600 text-base">
-                        ₨ {(calculateTotal() - (calculateTotal() * (master.discount || 0)) / 100).toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+            <div className="flex-1 overflow-y-auto">
+              {soLoading ? (
+                <div className="p-4 text-center text-gray-400">Loading sale orders...</div>
+              ) : soPaginated.length === 0 ? (
+                <div className="p-4 text-center text-gray-400">No pending sale orders found</div>
+              ) : (
+                soPaginated.map((so) => {
+                  const soTotal = so.details?.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0) || 0;
+                  return (
+                    <div
+                      key={so.id}
+                      onClick={() => loadSOData(so)}
+                      className={`px-4 py-3 border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors ${
+                        selectedSOId === so.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          {selectedSOId === so.id ? <CheckCircle size={18} className="text-blue-500" /> : <Circle size={18} className="text-gray-400" />}
+                          <span className="font-semibold text-gray-900">SO #{so.vno}</span>
+                        </div>
+                        <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">Pending</span>
+                      </div>
+                      <div className="text-sm text-gray-600 ml-7">
+                        <div>{so.customer_name || 'No customer'}</div>
+                        <div className="text-xs text-gray-400">
+                          {new Date(so.vdate).toLocaleDateString()} | Total: ₨ {formatAmount(soTotal)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
-          </div>
 
-          {/* Footer */}
-          <div className="flex-shrink-0 bg-gray-200 border-t border-gray-300 px-8 py-1.5 flex justify-between items-center">
-            <div className="text-green-600 text-xl font-bold">
-              Grand Total: ₨ {(calculateTotal() - (calculateTotal() * (master.discount || 0)) / 100).toFixed(2)}
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="px-6 py-1 bg-gray-200 hover:bg-gray-300 border border-gray-400 rounded-xs text-sm font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-8 py-1 bg-green-600 hover:bg-green-700 text-white rounded-xs text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : editingSaleBill ? 'Update' : 'Create'}
-              </button>
+            <div className="border-t border-gray-300 px-4 py-2 flex items-center justify-between bg-gray-50">
+              <span className="text-sm text-gray-500">{soTotalItems === 0 ? "0-0 / 0" : `${soStart}-${soEnd} / ${soTotalItems}`}</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setSoCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={soCurrentPage === 1 || soTotalItems === 0}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 disabled:opacity-50 rounded transition"
+                >
+                  ◀
+                </button>
+                <button
+                  onClick={() => setSoCurrentPage((p) => p + 1)}
+                  disabled={soEnd >= soTotalItems || soTotalItems === 0}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 disabled:opacity-50 rounded transition"
+                >
+                  ▶
+                </button>
+              </div>
             </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };
 

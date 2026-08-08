@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Filter,
   ChevronDown,
+  Weight,
 } from 'lucide-react';
 import api from '../../api/api';
 import { Button } from '@/components/ui/button';
@@ -104,7 +105,9 @@ const Inventory = () => {
               uom_name: detail.uom_display || item.UOM?.UOM_NAME || 'PCS',
               location_name: locationName,
               quantity: 0,
-              total_cost: 0,        // sum of purchase costs
+              total_cost: 0,
+              total_weight_kg: 0,
+              total_weight_lbs: 0,
               reorder_level: item.REORDER_LEVEL || 0,
             });
           }
@@ -112,14 +115,18 @@ const Inventory = () => {
           const entry = stockMap.get(key);
           const qty = parseFloat(detail.qty) || 0;
           const rate = parseFloat(detail.rate) || 0;
+          const weightKg = parseFloat(detail.weight_kg) || 0;
+          const weightLbs = parseFloat(detail.weight_lbs) || 0;
+
           entry.quantity += qty;
           entry.total_cost += qty * rate;
+          entry.total_weight_kg += weightKg;
+          entry.total_weight_lbs += weightLbs;
         }
       }
 
       // ─── 2. Subtract completed sales ──────────────────────────────────
       for (const sale of sales) {
-        // Only deduct if the sale is completed ('C')
         if (sale.stts !== 'C') continue;
 
         const detailsRes = await api.get(`/sales/sale-master/${sale.id}/`);
@@ -133,8 +140,6 @@ const Inventory = () => {
           const locationName = detail.location_display || 'Main Store';
           const key = `${itemId}-${locationName}`;
 
-          // If this item+location doesn't exist yet (e.g. sold before purchase),
-          // we create a placeholder with zero cost.
           if (!stockMap.has(key)) {
             stockMap.set(key, {
               item_id: itemId,
@@ -144,14 +149,29 @@ const Inventory = () => {
               location_name: locationName,
               quantity: 0,
               total_cost: 0,
+              total_weight_kg: 0,
+              total_weight_lbs: 0,
               reorder_level: item.REORDER_LEVEL || 0,
             });
           }
 
           const entry = stockMap.get(key);
           const qty = parseFloat(detail.qty) || 0;
-          entry.quantity -= qty;   // subtract the sold quantity
-          // total_cost remains unchanged (cost is based on purchases)
+          const weightKg = parseFloat(detail.weight_kg) || 0;
+          const weightLbs = parseFloat(detail.weight_lbs) || 0;
+
+          entry.quantity -= qty;
+          // Subtract weight proportionally? For simplicity we subtract the sold weight.
+          // If weight fields are not stored on sale details, we cannot subtract weight.
+          // For now we'll just subtract quantity and leave weight unchanged.
+          // But to be accurate, we should subtract the weight of the sold items.
+          // Since we have weight_kg/lbs on sale details, we can subtract them.
+          // However, we need to ensure the sale details have weight fields.
+          // We'll subtract if available, else ignore.
+          if (detail.weight_kg !== undefined) {
+            entry.total_weight_kg -= weightKg;
+            entry.total_weight_lbs -= weightLbs;
+          }
         }
       }
 
@@ -159,10 +179,14 @@ const Inventory = () => {
       const inventoryData = Array.from(stockMap.values()).map(entry => {
         const quantity = entry.quantity;
         const totalCost = entry.total_cost;
+        const avgCost = quantity > 0 ? totalCost / quantity : 0;
         return {
           ...entry,
-          average_cost: quantity > 0 ? totalCost / quantity : 0,
-          stock_value: totalCost,   // total cost of purchases (not reduced by sales)
+          average_cost: avgCost,
+          stock_value: totalCost,
+          // Ensure weight doesn't go negative
+          total_weight_kg: Math.max(0, entry.total_weight_kg),
+          total_weight_lbs: Math.max(0, entry.total_weight_lbs),
         };
       });
 
@@ -215,11 +239,12 @@ const Inventory = () => {
     const totalItems = inventory.length;
     const totalUnits = inventory.reduce((sum, i) => sum + i.quantity, 0);
     const totalValue = inventory.reduce((sum, i) => sum + i.stock_value, 0);
+    const totalWeightKg = inventory.reduce((sum, i) => sum + i.total_weight_kg, 0);
     const lowStock = inventory.filter(i => i.quantity > 0 && i.quantity <= i.reorder_level).length;
-    return { totalItems, totalUnits, totalValue, lowStock };
+    return { totalItems, totalUnits, totalValue, totalWeightKg, lowStock };
   }, [inventory]);
 
-  // ─── UI (unchanged) ──────────────────────────────────────────────────
+  // ─── UI ──────────────────────────────────────────────────
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -274,7 +299,7 @@ const Inventory = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <SummaryCard
           icon={Package}
           label="Total Items"
@@ -292,6 +317,12 @@ const Inventory = () => {
           label="Stock Value"
           value={`₨ ${summary.totalValue.toFixed(2)}`}
           subtitle="Current inventory value"
+        />
+        <SummaryCard
+          icon={Weight}
+          label="Total Weight"
+          value={`${summary.totalWeightKg.toFixed(3)} kg`}
+          subtitle="Net weight in kg"
         />
         <SummaryCard
           icon={AlertTriangle}
@@ -312,7 +343,7 @@ const Inventory = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] text-sm">
+          <table className="w-full min-w-[1200px] text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
@@ -320,6 +351,8 @@ const Inventory = () => {
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Quantity</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">UOM</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (kg)</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (lbs)</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg. Cost</th>
                 <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock Value</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
@@ -329,13 +362,13 @@ const Inventory = () => {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="px-5 py-12 text-center text-gray-500">
+                  <td colSpan="11" className="px-5 py-12 text-center text-gray-500">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-gray-600" />
                   </td>
                 </tr>
               ) : filteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-5 py-12 text-center">
+                  <td colSpan="11" className="px-5 py-12 text-center">
                     <Boxes className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                     <p className="font-medium text-gray-700">No inventory found</p>
                     <p className="text-sm text-gray-400">Try adjusting your search or filters.</p>
@@ -358,6 +391,12 @@ const Inventory = () => {
                       {item.quantity.toFixed(3)}
                     </td>
                     <td className="px-5 py-4 text-gray-600">{item.uom_name || '—'}</td>
+                    <td className="px-5 py-4 text-right text-gray-700">
+                      {item.total_weight_kg.toFixed(3)}
+                    </td>
+                    <td className="px-5 py-4 text-right text-gray-700">
+                      {item.total_weight_lbs.toFixed(3)}
+                    </td>
                     <td className="px-5 py-4 text-right text-gray-700">
                       {item.average_cost.toFixed(2)}
                     </td>

@@ -1,3 +1,4 @@
+# apps/purchases/serializers.py
 from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Sum
@@ -6,6 +7,7 @@ from .models import PurchaseMaster, PurchaseDetail
 from apps.accounting.models import VoucherMaster, VoucherDetail, Party
 from apps.ac_setup.models import ACSetup
 from apps.locations.models import Location
+
 
 class PurchaseDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)
@@ -18,16 +20,22 @@ class PurchaseDetailSerializer(serializers.ModelSerializer):
         allow_null=True
     )
 
+    # Weight fields – weight_kg and weight_lbs are read‑only
+    weight_per_unit = serializers.DecimalField(max_digits=10, decimal_places=3, required=False)
+    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+
     class Meta:
         model = PurchaseDetail
         fields = (
             'vsn', 'item_code', 'item_code_display',
             'uom', 'uom_display',
             'qty', 'rate', 'amount',
-            'location', 'location_display'
+            'location', 'location_display',
+            'weight_per_unit', 'weight_kg', 'weight_lbs'
         )
         extra_kwargs = {
-            'location': {'required': False, 'allow_null': True}
+            'location': {'required': False, 'allow_null': True},
         }
 
 
@@ -91,7 +99,7 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
         if not setup.purchase_code:
             raise serializers.ValidationError({"purchase_code": "No purchase account configured in AC_SETUP."})
 
-        purchase_account_id = setup.purchase_code  # now an integer
+        purchase_account_id = setup.purchase_code  # integer
         try:
             purchase_party = Party.objects.get(id=purchase_account_id)
         except Party.DoesNotExist:
@@ -135,6 +143,13 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"details": f"Invalid location for row {row}."})
                 detail['location'] = loc
 
+            # weight_per_unit optional – if provided, ensure non-negative
+            weight_per_unit = detail.get('weight_per_unit')
+            if weight_per_unit is not None and Decimal(str(weight_per_unit)) < 0:
+                raise serializers.ValidationError({
+                    "details": f"Weight per unit must be >= 0 for row {row}."
+                })
+
         discount = data.get('discount') or Decimal('0.00')
         if discount < 0:
             raise serializers.ValidationError({"discount": "Discount cannot be negative."})
@@ -151,8 +166,7 @@ class PurchaseMasterCreateSerializer(serializers.ModelSerializer):
         for detail in details_data:
             print("🔍 DEBUG: Detail before pop:", detail)
             location = detail.pop('location', None)
-            print("🔍 DEBUG: Extracted location:", location)
-
+            # weight_per_unit is passed; weight_kg/lbs will be auto-calculated in model.save()
             PurchaseDetail.objects.create(
                 vtype=purchase.vtype,
                 vno=purchase.vno,

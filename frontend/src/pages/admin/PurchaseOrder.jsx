@@ -1,4 +1,4 @@
-// src/pages/admin/PurchaseOrder.jsx
+// src/pages/admin/Purchases.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import AddPurchaseOrderModal from '../../components/Purchase Order/AddPurchaseOrderModal';
+import AddPurchaseModal from '../../components/Purchases/AddPurchaseModal';
 import { Badge } from '@/components/ui/badge';
 
 // ─── Stat Card ───
@@ -56,12 +56,11 @@ const EmptyState = ({ icon: Icon, title, description, actionLabel, onAction }) =
 // ─── Status Badge ───
 const StatusBadge = ({ status }) => {
   const statusMap = {
-    P: { label: 'Pending', className: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-    D: { label: 'Draft', className: 'bg-gray-50 text-gray-700 border-gray-200' },
-    C: { label: 'Completed', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    V: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
+    A: { label: 'Active', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    C: { label: 'Completed', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+    V: { label: 'Void', className: 'bg-red-50 text-red-700 border-red-200' },
   };
-  const s = statusMap[status] || statusMap.P;
+  const s = statusMap[status] || statusMap.A;
   return (
     <Badge variant="outline" className={`px-3 py-0.5 text-xs font-medium rounded-full border ${s.className}`}>
       {s.label}
@@ -82,29 +81,42 @@ const SearchBar = ({ value, onChange, placeholder }) => (
   </div>
 );
 
+// ─── Helpers ───
+const computeTotals = (purchase) => {
+  const details = purchase.details || [];
+  const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
+  const grandTotal = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+  const totalWeightKg = details.reduce((sum, d) => sum + (parseFloat(d.weight_kg) || 0), 0);
+  const totalWeightLbs = details.reduce((sum, d) => sum + (parseFloat(d.weight_lbs) || 0), 0);
+  return { totalQty, grandTotal, totalWeightKg, totalWeightLbs };
+};
+
+const getLocations = (purchase) => {
+  const details = purchase.details || [];
+  const locs = details
+    .map(d => d.location_display || d.location_name || '')
+    .filter(Boolean);
+  return [...new Set(locs)].join(', ') || '-';
+};
+
 // ─── Main Component ───
-const PurchaseOrder = () => {
+const Purchases = () => {
   const [loading, setLoading] = useState(false);
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingPO, setEditingPO] = useState(null);
+  const [editingPurchase, setEditingPurchase] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/purchase-orders/purchase-orders/');
-      // Ensure each PO has details array, even if empty
-      const data = (res.data || []).map(po => ({
-        ...po,
-        details: po.details || [],
-      }));
-      setPurchaseOrders(data);
+      const res = await api.get('/purchases/purchase-master/');
+      setPurchases(res.data);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to load purchase orders');
+      toast.error('Failed to load purchases');
     } finally {
       setLoading(false);
     }
@@ -114,30 +126,24 @@ const PurchaseOrder = () => {
     fetchData();
   }, []);
 
-  // Compute totals from details
-  const computeTotals = (po) => {
-    const details = po.details || [];
-    const totalQty = details.reduce((sum, d) => sum + (parseFloat(d.qty) || 0), 0);
-    const grandTotal = details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
-    return { totalQty, grandTotal };
-  };
-
   const filtered = useMemo(() => {
-    if (!search.trim()) return purchaseOrders;
+    if (!search.trim()) return purchases;
     const q = search.toLowerCase();
-    return purchaseOrders.filter(
+    return purchases.filter(
       (p) =>
         p.vtype?.toLowerCase().includes(q) ||
         String(p.vno).includes(q) ||
-        p.supplier_name?.toLowerCase().includes(q)
+        p.account_code_display?.toLowerCase().includes(q) ||
+        p.purchase_code_display?.toLowerCase().includes(q) ||
+        getLocations(p).toLowerCase().includes(q)
     );
-  }, [purchaseOrders, search]);
+  }, [purchases, search]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
-      await api.delete(`/purchase-orders/purchase-orders/${deleteId}/`);
-      toast.success('Purchase Order deleted');
+      await api.delete(`/purchases/purchase-master/${deleteId}/`);
+      toast.success('Purchase deleted');
       fetchData();
     } catch (error) {
       toast.error('Failed to delete');
@@ -147,76 +153,65 @@ const PurchaseOrder = () => {
     }
   };
 
-  // Stats
-  const totalOrders = purchaseOrders.length;
-  const totalPending = purchaseOrders.filter(p => p.stts === 'P').length;
-  const totalCompleted = purchaseOrders.filter(p => p.stts === 'C').length;
-
   return (
     <div>
-      {/* Stats */}
-      {/* <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard icon={ShoppingCart} label="Total Orders" value={totalOrders} />
-        <StatCard icon={FileText} label="Pending" value={totalPending} />
-        <StatCard icon={CheckCircle} label="Completed" value={totalCompleted} />
-      </div> */}
-
-      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
         <div>
-          <h1 className='text-2xl font-bold'>Purchase Orders</h1>
+          <h1 className="text-2xl font-bold">Purchase Bills</h1>
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <SearchBar
             value={search}
             onChange={setSearch}
-            placeholder="Search Purchase Orders"
+            placeholder="Search Purchase Bills"
           />
           <Button
             onClick={() => {
-              setEditingPO(null);
+              setEditingPurchase(null);
               setModalOpen(true);
             }}
             className="bg-green-600 hover:bg-green-700 text-white rounded-xs text-sm h-9 px-4"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add PO
+            Add Purchase
           </Button>
         </div>
       </div>
 
-      {/* Table */}
       <div className="rounded-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200">
-                <th className="w-20 py-3 text-center border-r border-gray-300 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="w-8 py-3 text-center border-r border-gray-300 text-xs font-semibold text-gray-500 uppercase tracking-wider">VNO</th>
-                <th className="px-5 py-3 text-left border-r border-gray-300 text-xs font-semibold text-gray-500 uppercase tracking-wider">Supplier</th>
-                <th className="w-20 py-3 text-center border-r border-gray-300 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Qty</th>
-                <th className="w-40 py-3 text-center border-r border-gray-300 text-xs font-semibold text-gray-500 uppercase tracking-wider">Grand Total</th>
-                <th className="w-40 py-3 text-center border-r border-gray-300 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="w-40 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="w-24 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="w-12 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">VNO</th>
+                <th className="px-5 py-3 border-r border-gray-300 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Supplier</th>
+                <th className="w-40 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Warehouse</th>
+                <th className="w-20 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                <th className="w-28 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (kg)</th>
+                <th className="w-28 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight (lbs)</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Grand Total</th>
+                <th className="w-32 py-3 border-r border-gray-300 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="w-28 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-5 py-12 text-center">
+                  <td colSpan="10" className="px-5 py-12 text-center">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-gray-600" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="7">
+                  <td colSpan="10">
                     <EmptyState
                       icon={ShoppingCart}
-                      title="No purchase orders found"
-                      description="Create your first purchase order to track orders with suppliers."
-                      actionLabel="Add PO"
+                      title="No purchases found"
+                      description="Create your first purchase to track your inventory purchases."
+                      actionLabel="Add Purchase"
                       onAction={() => {
-                        setEditingPO(null);
+                        setEditingPurchase(null);
                         setModalOpen(true);
                       }}
                     />
@@ -224,24 +219,33 @@ const PurchaseOrder = () => {
                 </tr>
               ) : (
                 filtered.map((p) => {
-                  const { totalQty, grandTotal } = computeTotals(p);
+                  const { totalQty, grandTotal, totalWeightKg, totalWeightLbs } = computeTotals(p);
+                  const locations = getLocations(p);
                   return (
                     <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                      
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-yellow-700">
                         {new Date(p.vdate).toLocaleDateString()}
                       </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300">
-                        <span className="inline-flex font-mono text-sm font-medium">
-                          {p.vno}
-                        </span>
+                        <span className="inline-flex font-mono text-sm font-medium">{p.vno}</span>
                       </td>
-                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-gray-900">{p.supplier_name || '-'}</td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-sm text-gray-900">
+                        {p.account_code_display || '-'}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center text-sm text-gray-700">
+                        {locations}
+                      </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-blue-700">
                         {totalQty.toFixed(3)}
                       </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-gray-700">
+                        {totalWeightKg.toFixed(3)}
+                      </td>
+                      <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-gray-700">
+                        {totalWeightLbs.toFixed(3)}
+                      </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center font-medium text-green-700">
-                         {grandTotal.toFixed(2)}
+                        {grandTotal.toFixed(2)}
                       </td>
                       <td className="px-5 py-3.5 border-r border-b border-gray-300 text-center">
                         <StatusBadge status={p.stts} />
@@ -250,7 +254,7 @@ const PurchaseOrder = () => {
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => {
-                              setEditingPO(p);
+                              setEditingPurchase(p);
                               setModalOpen(true);
                             }}
                             className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -274,21 +278,19 @@ const PurchaseOrder = () => {
         </div>
       </div>
 
-      {/* Modal */}
-      <AddPurchaseOrderModal
+      <AddPurchaseModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        editingPO={editingPO}
+        editingPurchase={editingPurchase}
         onSave={fetchData}
       />
 
-      {/* Delete Dialog */}
       <AlertDialog open={deleteDialog} onOpenChange={setDeleteDialog}>
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg font-semibold text-gray-900">Delete Purchase Order</AlertDialogTitle>
+            <AlertDialogTitle className="text-lg font-semibold text-gray-900">Delete Purchase</AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-gray-500">
-              This purchase order will be permanently removed. This action cannot be undone.
+              This purchase record will be permanently removed. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -305,4 +307,4 @@ const PurchaseOrder = () => {
   );
 };
 
-export default PurchaseOrder;
+export default Purchases;

@@ -1,3 +1,4 @@
+# apps/sales/serializers.py
 from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Sum
@@ -5,14 +6,19 @@ from decimal import Decimal
 from .models import SaleMaster, SaleDetail
 from apps.accounting.models import VoucherMaster, VoucherDetail, Party
 from apps.ac_setup.models import ACSetup
-from apps.locations.models import Location          # ← new import
+from apps.locations.models import Location
+
 
 class SaleDetailSerializer(serializers.ModelSerializer):
     item_code_display = serializers.CharField(source='item_code.item_code', read_only=True)
     uom_display = serializers.CharField(source='uom.SHORT_NAME', read_only=True)
-    location_display = serializers.CharField(source='location.name', read_only=True)   # ← new
+    location_display = serializers.CharField(source='location.name', read_only=True)
 
-    # Explicitly define location as PrimaryKeyRelatedField
+    # Weight fields
+    weight_per_unit = serializers.DecimalField(max_digits=10, decimal_places=3, required=False)
+    weight_kg = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+    weight_lbs = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
+
     location = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
@@ -25,7 +31,8 @@ class SaleDetailSerializer(serializers.ModelSerializer):
             'vsn', 'item_code', 'item_code_display',
             'uom', 'uom_display',
             'qty', 'rate', 'amount',
-            'location', 'location_display'          # ← new
+            'location', 'location_display',
+            'weight_per_unit', 'weight_kg', 'weight_lbs'
         )
         extra_kwargs = {
             'location': {'required': False, 'allow_null': True}
@@ -121,7 +128,7 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
             if 'amount' not in detail or not detail['amount']:
                 detail['amount'] = Decimal(str(qty)) * Decimal(str(rate))
 
-            # Optional: validate location is an integer if provided
+            # Validate location (optional)
             loc = detail.get('location')
             if loc is not None and not isinstance(loc, (int, Location)):
                 try:
@@ -129,6 +136,13 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
                 except (ValueError, TypeError):
                     raise serializers.ValidationError({"details": f"Invalid location for row {row}."})
                 detail['location'] = loc
+
+            # Validate weight_per_unit (optional, must be >= 0)
+            weight_per_unit = detail.get('weight_per_unit')
+            if weight_per_unit is not None and Decimal(str(weight_per_unit)) < 0:
+                raise serializers.ValidationError({
+                    "details": f"Weight per unit must be >= 0 for row {row}."
+                })
 
         return data
 
@@ -140,15 +154,12 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
         sale = SaleMaster.objects.create(**validated_data)
 
         for detail in details_data:
-            print("🔍 DEBUG: Detail before pop:", detail)
             location = detail.pop('location', None)
-            print("🔍 DEBUG: Extracted location:", location)
-
             SaleDetail.objects.create(
                 vtype=sale.vtype,
                 vno=sale.vno,
                 sale_master=sale,
-                location=location,     # ← save location
+                location=location,
                 **detail
             )
 
@@ -159,7 +170,6 @@ class SaleMasterCreateSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         details_data = validated_data.pop('details', None)
-        print("🔍 DEBUG: Update sale details data:", details_data)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

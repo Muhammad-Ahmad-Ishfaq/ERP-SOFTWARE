@@ -82,6 +82,24 @@ class PurchaseDetail(models.Model):
         db_column='LOCATION_ID',
         related_name='purchase_details'
     )
+
+    # ─── Weight fields ────────────────────────────────────────────────────
+    weight_per_unit = models.DecimalField(
+        max_digits=10, decimal_places=3,
+        default=0,
+        help_text="Weight per unit (kg) – taken from item at purchase time"
+    )
+    weight_kg = models.DecimalField(
+        max_digits=15, decimal_places=3,
+        default=0,
+        help_text="Total weight in kg (qty × weight_per_unit)"
+    )
+    weight_lbs = models.DecimalField(
+        max_digits=15, decimal_places=3,
+        default=0,
+        help_text="Total weight in lbs (weight_kg × 2.2040)"
+    )
+
     purchase_master = models.ForeignKey(
         PurchaseMaster,
         on_delete=models.CASCADE,
@@ -96,6 +114,16 @@ class PurchaseDetail(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['vtype', 'vno', 'vsn'], name='PK_VTYPNOSN_PURD')
         ]
+
+    def save(self, *args, **kwargs):
+        # Auto‑calculate weight_kg and weight_lbs if qty and weight_per_unit are set
+        if self.qty and self.weight_per_unit:
+            self.weight_kg = self.qty * self.weight_per_unit
+            self.weight_lbs = self.weight_kg * Decimal('2.2040')
+        else:
+            self.weight_kg = 0
+            self.weight_lbs = 0
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.vtype}-{self.vno}-{self.vsn}"

@@ -57,7 +57,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     user_no: '',
   });
 
-  // ── Dynamic detail rows ──
+  // ── Dynamic detail rows with weight fields ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -65,7 +65,10 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     qty: 0,
     rate: 0,
     amount: 0,
-    location: null,   // ← new field
+    location: null,
+    weight_per_unit: 0,
+    weight_kg: 0,
+    weight_lbs: 0,
   });
 
   const [details, setDetails] = useState(
@@ -78,13 +81,13 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
   const [accounts, setAccounts] = useState([]);
   const [items, setItems] = useState([]);
   const [units, setUnits] = useState([]);
-  const [locations, setLocations] = useState([]);   // ← new
+  const [locations, setLocations] = useState([]);
 
   // ── Combobox queries ──
   const [accountQuery, setAccountQuery] = useState('');
   const [itemQueries, setItemQueries] = useState({});
   const [uomQueries, setUomQueries] = useState({});
-  const [locationQueries, setLocationQueries] = useState({});   // ← new
+  const [locationQueries, setLocationQueries] = useState({});
 
   // ── Get logged-in user ID ──
   const getCurrentUserId = () => {
@@ -132,7 +135,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
         api.get('/accounting/parties/'),
         api.get('/inventory/items/'),
         api.get('/inventory/units/'),
-        api.get('/locations/locations/'),   // ← fetch locations
+        api.get('/locations/locations/'),
       ]);
       setAccounts(accountsRes.data || []);
       setItems(itemsRes.data || []);
@@ -195,7 +198,10 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
         qty: d.qty || 0,
         rate: d.rate || 0,
         amount: d.amount || 0,
-        location: d.location || null,   // ← preserve location
+        location: d.location || null,
+        weight_per_unit: d.weight_per_unit || 0,
+        weight_kg: d.weight_kg || 0,
+        weight_lbs: d.weight_lbs || 0,
       }));
       while (newDetails.length < 8) {
         newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -242,7 +248,10 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
       qty: d.qty || 0,
       rate: d.rate || 0,
       amount: d.amount || 0,
-      location: d.location || null,   // if PO has location, keep it
+      location: d.location || null,
+      weight_per_unit: d.weight_per_unit || 0,
+      weight_kg: d.weight_kg || 0,
+      weight_lbs: d.weight_lbs || 0,
     }));
     while (newDetails.length < 8) {
       newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -266,6 +275,19 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
     toast.success(`Purchase Order #${po.vno} loaded`);
   };
 
+  // ── Recalculate weight and amount ──
+  const recalcRow = (row) => {
+    const qty = parseFloat(row.qty) || 0;
+    const weightPerUnit = parseFloat(row.weight_per_unit) || 0;
+    const rate = parseFloat(row.rate) || 0;
+
+    const weightKg = qty * weightPerUnit;
+    const weightLbs = weightKg * 2.2046;
+    const amount = weightLbs * rate;
+
+    return { ...row, weight_kg: weightKg, weight_lbs: weightLbs, amount };
+  };
+
   // ── Handlers ──
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
@@ -278,12 +300,13 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
 
   const handleDetailChange = (index, field, value) => {
     const newDetails = [...details];
-    const updated = { ...newDetails[index], [field]: value };
-    if (field === 'qty' || field === 'rate') {
-      const qty = parseFloat(updated.qty) || 0;
-      const rate = parseFloat(updated.rate) || 0;
-      updated.amount = qty * rate;
+    let updated = { ...newDetails[index], [field]: value };
+
+    // Recalculate weight and amount if relevant field changes
+    if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
+      updated = recalcRow(updated);
     }
+
     newDetails[index] = updated;
     setDetails(newDetails);
 
@@ -325,6 +348,12 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
   const getItemName = (id) => {
     const item = items.find(i => i.ITEM_ID === parseInt(id));
     return item ? item.ITEM_NAME : '';
+  };
+
+  // ── Get item weight from items list ──
+  const getItemWeight = (id) => {
+    const item = items.find(i => i.ITEM_ID === parseInt(id));
+    return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
   };
 
   const getFilteredAccounts = (query) => {
@@ -415,7 +444,10 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
           qty: parseFloat(d.qty),
           rate: parseFloat(d.rate),
           amount: parseFloat(d.amount),
-          location: d.location || null,   // ← send location
+          location: d.location || null,
+          weight_per_unit: parseFloat(d.weight_per_unit) || 0,
+          weight_kg: parseFloat(d.weight_kg) || 0,
+          weight_lbs: parseFloat(d.weight_lbs) || 0,
         })),
       };
       const url = editingPurchase
@@ -649,9 +681,12 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-48">Item Code</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
                         <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">UOM</th>
-                        <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th> {/* new */}
+                        <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Location</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
+                        <th className="text-center text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight/Unit (kg)</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
+                        <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
                         <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
                       </tr>
                     </thead>
@@ -665,7 +700,12 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                             <td className="border-r border-b border-gray-300 p-0">
                               <Combobox
                                 value={row.item_code}
-                                onChange={(val) => handleDetailChange(index, 'item_code', val)}
+                                onChange={(val) => {
+                                  handleDetailChange(index, 'item_code', val);
+                                  // Auto-fill weight_per_unit from item's WEIGHT_KG
+                                  const weight = getItemWeight(val);
+                                  handleDetailChange(index, 'weight_per_unit', weight);
+                                }}
                               >
                                 <div className="relative">
                                   <Combobox.Input
@@ -799,9 +839,10 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                                 type="number"
                                 step="0.001"
                                 value={row.qty || ''}
-                                onChange={(e) =>
-                                  handleDetailChange(index, 'qty', parseFloat(e.target.value) || 0)
-                                }
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'qty', val);
+                                }}
                                 className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
                                 placeholder="0"
                               />
@@ -811,14 +852,35 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                                 type="number"
                                 step="0.0001"
                                 value={row.rate || ''}
-                                onChange={(e) =>
-                                  handleDetailChange(index, 'rate', parseFloat(e.target.value) || 0)
-                                }
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'rate', val);
+                                }}
                                 className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
                                 placeholder="0.0000"
                               />
                             </td>
-                            <td className="border-r border-b border-gray-300 text-right font-medium text-red-500 px-3 py-1.5">
+                            {/* ─── Weight fields ─── */}
+                            <td className="border-r border-b border-gray-300 p-0">
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={row.weight_per_unit || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleDetailChange(index, 'weight_per_unit', val);
+                                }}
+                                className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-500"
+                                placeholder="0.000"
+                              />
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                              {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                              {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                            </td>
+                            <td className="border-r border-b border-gray-300 text-right font-bold text-red-600 px-3 py-1.5">
                               {formatAmount(rowAmount)}
                             </td>
                           </tr>
@@ -827,7 +889,7 @@ const AddPurchaseModal = ({ open, onOpenChange, editingPurchase, onSave }) => {
                     </tbody>
                     <tfoot className="bg-gray-200">
                       <tr className="border-t border-gray-300">
-                        <td colSpan="7" className="px-3 py-2 text-right font-semibold text-gray-900">Total Amount:</td>
+                        <td colSpan="10" className="px-3 py-2 text-right font-semibold text-gray-900">Total Amount:</td>
                         <td className="px-3 py-2 text-right font-bold text-red-600 text-base">
                           {formatAmount(details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0))}
                         </td>

@@ -45,7 +45,7 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     user_no: '',
   });
 
-  // ── Dynamic detail rows ──
+  // ── Dynamic detail rows with weight fields ──
   const createEmptyRow = (vsn) => ({
     vsn,
     item_code: '',
@@ -53,6 +53,9 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     qty: 0,
     rate: 0,
     amount: 0,
+    weight_per_unit: 0,
+    weight_kg: 0,
+    weight_lbs: 0,
   });
 
   const [details, setDetails] = useState(
@@ -93,7 +96,6 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
       setMaster(prev => ({ ...prev, vno: res.data.next_voucher_no || 1 }));
     } catch (error) {
       console.error('Error fetching next voucher number:', error);
-      // Fallback: compute from existing records
       try {
         const res = await api.get('/sale-orders/sale-orders/');
         const orders = res.data || [];
@@ -153,6 +155,9 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
         qty: d.qty || 0,
         rate: d.rate || 0,
         amount: d.amount || 0,
+        weight_per_unit: d.weight_per_unit || 0,
+        weight_kg: d.weight_kg || 0,
+        weight_lbs: d.weight_lbs || 0,
       }));
       while (newDetails.length < 8) {
         newDetails.push(createEmptyRow(newDetails.length + 1));
@@ -174,6 +179,19 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
     }
   }, [editingSaleOrder, open, nextVoucherNo]);
 
+  // ── Recalculate weight and amount ──
+  const recalcRow = (row) => {
+    const qty = parseFloat(row.qty) || 0;
+    const weightPerUnit = parseFloat(row.weight_per_unit) || 0;
+    const rate = parseFloat(row.rate) || 0;
+
+    const weightKg = qty * weightPerUnit;
+    const weightLbs = weightKg * 2.2046;
+    const amount = weightLbs * rate;
+
+    return { ...row, weight_kg: weightKg, weight_lbs: weightLbs, amount };
+  };
+
   // ── Handlers ──
   const handleMasterChange = (field, value) => {
     setMaster(prev => ({ ...prev, [field]: value }));
@@ -181,12 +199,13 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
 
   const handleDetailChange = (index, field, value) => {
     const newDetails = [...details];
-    const updated = { ...newDetails[index], [field]: value };
-    if (field === 'qty' || field === 'rate') {
-      const qty = parseFloat(updated.qty) || 0;
-      const rate = parseFloat(updated.rate) || 0;
-      updated.amount = qty * rate;
+    let updated = { ...newDetails[index], [field]: value };
+
+    // Recalculate weight and amount if relevant field changes
+    if (field === 'qty' || field === 'rate' || field === 'weight_per_unit') {
+      updated = recalcRow(updated);
     }
+
     newDetails[index] = updated;
     setDetails(newDetails);
 
@@ -221,6 +240,12 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
   const getItemName = (id) => {
     const item = items.find(i => i.ITEM_ID === parseInt(id));
     return item ? item.ITEM_NAME : '';
+  };
+
+  // ── Get item weight from items list ──
+  const getItemWeight = (id) => {
+    const item = items.find(i => i.ITEM_ID === parseInt(id));
+    return item ? parseFloat(item.WEIGHT_KG) || 0 : 0;
   };
 
   // ── Filter functions ──
@@ -294,6 +319,9 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
           qty: parseFloat(d.qty),
           rate: parseFloat(d.rate),
           amount: parseFloat(d.amount),
+          weight_per_unit: parseFloat(d.weight_per_unit) || 0,
+          weight_kg: parseFloat(d.weight_kg) || 0,
+          weight_lbs: parseFloat(d.weight_lbs) || 0,
         })),
       };
       const url = editingSaleOrder
@@ -379,7 +407,7 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-2">
-            {/* Row 1: Voucher No, Date */}
+            {/* Row 1: Order No, Date */}
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center justify-center gap-4">
                 <div>
@@ -496,17 +524,17 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
             </div>
 
             {/* Row 3: Remarks */}
-            <div className='grid grid-cols-3 mb-3'>
-                <div className="">
-              <label className="block text-sm font-medium text-gray-900 mb-1">Remarks</label>
-              <textarea
-                rows={2}
-                value={master.remarks || ''}
-                onChange={(e) => handleMasterChange('remarks', e.target.value)}
-                placeholder="Additional remarks"
-                className="w-full bg-gray-100 border border-gray-300 rounded-xs text-sm px-2 py-1 text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-green-500"
-              />
-            </div>
+            <div className="grid grid-cols-3 mb-3">
+              <div className="">
+                <label className="block text-sm font-medium text-gray-900 mb-1">Remarks</label>
+                <textarea
+                  rows={2}
+                  value={master.remarks || ''}
+                  onChange={(e) => handleMasterChange('remarks', e.target.value)}
+                  placeholder="Additional remarks"
+                  className="w-full bg-gray-100 border border-gray-300 rounded-xs text-sm px-2 py-1 text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-green-500"
+                />
+              </div>
             </div>
 
             {/* Items Table */}
@@ -522,12 +550,15 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                   <thead className="bg-gray-200 text-gray-300">
                     <tr>
                       <th className="text-gray-900 text-left px-3 py-1 border-r border-gray-400 w-12">#</th>
-                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-64">Item Code</th>
+                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-48">Item Code</th>
                       <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400">Material</th>
-                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-32">UOM</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Qty</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Rate (₨)</th>
-                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-32">Amount (₨)</th>
+                      <th className="text-left text-gray-900 px-3 py-1 border-r border-gray-400 w-24">UOM</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-20">Qty</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-24">Rate (₨)</th>
+                      <th className="text-center text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight/Unit (kg)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (kg)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Weight (lbs)</th>
+                      <th className="text-right text-gray-900 px-3 py-1 border-r border-gray-400 w-28">Amount (₨)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -547,7 +578,12 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                           <td className="border-r border-b border-gray-300 p-0">
                             <Combobox
                               value={row.item_code}
-                              onChange={(val) => handleDetailChange(index, 'item_code', val)}
+                              onChange={(val) => {
+                                handleDetailChange(index, 'item_code', val);
+                                // Auto-fill weight_per_unit from item's WEIGHT_KG
+                                const weight = getItemWeight(val);
+                                handleDetailChange(index, 'weight_per_unit', weight);
+                              }}
                             >
                               <div className="relative">
                                 <Combobox.Input
@@ -640,9 +676,10 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                               type="number"
                               step="0.001"
                               value={row.qty || ''}
-                              onChange={(e) =>
-                                handleDetailChange(index, 'qty', parseFloat(e.target.value) || 0)
-                              }
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleDetailChange(index, 'qty', val);
+                              }}
                               className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
                               placeholder="0"
                             />
@@ -652,14 +689,35 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                               type="number"
                               step="0.0001"
                               value={row.rate || ''}
-                              onChange={(e) =>
-                                handleDetailChange(index, 'rate', parseFloat(e.target.value) || 0)
-                              }
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleDetailChange(index, 'rate', val);
+                              }}
                               className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-right focus:outline-none focus:ring-1 focus:ring-green-500"
                               placeholder="0.0000"
                             />
                           </td>
-                          <td className="border-r border-b border-gray-300 text-right font-medium text-red-500 px-3 py-1.5">
+                          {/* Weight fields */}
+                          <td className="border-r border-b border-gray-300 p-0">
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={row.weight_per_unit || ''}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleDetailChange(index, 'weight_per_unit', val);
+                              }}
+                              className="w-full bg-white rounded-none px-2 py-1.5 text-gray-900 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-500"
+                              placeholder="0.000"
+                            />
+                          </td>
+                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                            {row.weight_kg ? row.weight_kg.toFixed(3) : '0.000'}
+                          </td>
+                          <td className="border-r border-b border-gray-300 text-right font-medium text-gray-700 px-3 py-1.5">
+                            {row.weight_lbs ? row.weight_lbs.toFixed(3) : '0.000'}
+                          </td>
+                          <td className="border-r border-b border-gray-300 text-right font-bold text-red-600 px-3 py-1.5">
                             {rowAmount.toFixed(2)}
                           </td>
                         </tr>
@@ -668,7 +726,7 @@ const AddSaleOrderModal = ({ open, onOpenChange, editingSaleOrder, onSave }) => 
                   </tbody>
                   <tfoot className="bg-gray-200">
                     <tr className="border-t border-gray-300">
-                      <td colSpan="6" className="px-3 py-2 text-right font-semibold text-gray-900">
+                      <td colSpan="9" className="px-3 py-2 text-right font-semibold text-gray-900">
                         Total Amount:
                       </td>
                       <td className="px-3 py-2 text-right font-bold text-red-600 text-base">
